@@ -54,7 +54,7 @@ const MarketAPI = {
   },
 
   /**
-   * Process API response with dual outputs
+   * Process API response (out-2 = analysis, out-3 = score)
    */
   processResponse(data) {
     // Validate response structure
@@ -115,10 +115,16 @@ const MarketAPI = {
     if (!trimmed) return null;
 
     // Remove common code fences or YAML markers
-    trimmed = trimmed
-      .replace(/^```(?:json)?\s*/i, '')
-      .replace(/```$/i, '')
-      .replace(/^---\s*$/, '');
+    if (trimmed.startsWith('```json')) {
+      trimmed = trimmed.slice(7);
+    }
+    if (trimmed.startsWith('```')) {
+      trimmed = trimmed.slice(3);
+    }
+    if (trimmed.endsWith('```')) {
+      trimmed = trimmed.slice(0, -3);
+    }
+    trimmed = trimmed.replace(/^---\s*$/, '').trim();
 
     const attemptParse = (text) => {
       try {

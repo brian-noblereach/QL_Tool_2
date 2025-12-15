@@ -1,5 +1,6 @@
 // js/utils/smartsheet.js - Smartsheet Integration for Venture Assessment Platform V02
 // Submits scores to Smartsheet via Google Apps Script proxy
+// Uses GET requests with URL parameters to avoid CORS preflight issues
 
 const SmartsheetIntegration = {
   // Google Apps Script Web App URL
@@ -34,13 +35,16 @@ const SmartsheetIntegration = {
       
       console.log(`Submitting ${metric} score to Smartsheet:`, payload);
 
-      const response = await fetch(this.proxyUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload),
-        mode: 'cors'
+      // Use GET with URL parameter to avoid CORS preflight
+      const requestData = {
+        action: 'smartsheet',
+        ...payload
+      };
+      const encodedData = encodeURIComponent(JSON.stringify(requestData));
+      const url = `${this.proxyUrl}?data=${encodedData}`;
+
+      const response = await fetch(url, {
+        method: 'GET'
       });
 
       // Google Apps Script returns text that we need to parse
@@ -98,13 +102,16 @@ const SmartsheetIntegration = {
       
       console.log('Submitting all scores to Smartsheet:', payload);
 
-      const response = await fetch(this.proxyUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload),
-        mode: 'cors'
+      // Use GET with URL parameter to avoid CORS preflight
+      const requestData = {
+        action: 'smartsheet',
+        ...payload
+      };
+      const encodedData = encodeURIComponent(JSON.stringify(requestData));
+      const url = `${this.proxyUrl}?data=${encodedData}`;
+
+      const response = await fetch(url, {
+        method: 'GET'
       });
 
       const responseText = await response.text();
@@ -390,8 +397,7 @@ const SmartsheetIntegration = {
   async testConnection() {
     try {
       const response = await fetch(this.proxyUrl, {
-        method: 'GET',
-        mode: 'cors'
+        method: 'GET'
       });
       const data = await response.json();
       console.log('Smartsheet proxy status:', data);

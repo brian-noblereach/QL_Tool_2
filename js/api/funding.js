@@ -49,7 +49,7 @@ const FundingAPI = {
   },
 
   /**
-   * Process API response
+   * Process API response (out-0 = analysis, out-1 = score)
    */
   processResponse(data) {
     const validation = Validators.validateApiResponse(data, ['out-0', 'out-1']);
@@ -109,8 +109,20 @@ const FundingAPI = {
       return null;
     }
 
-    const trimmed = raw.trim();
+    let trimmed = raw.trim();
     if (!trimmed) return null;
+
+    // Clean up markdown code blocks
+    if (trimmed.startsWith('```json')) {
+      trimmed = trimmed.slice(7);
+    }
+    if (trimmed.startsWith('```')) {
+      trimmed = trimmed.slice(3);
+    }
+    if (trimmed.endsWith('```')) {
+      trimmed = trimmed.slice(0, -3);
+    }
+    trimmed = trimmed.trim();
 
     try {
       return JSON.parse(trimmed);

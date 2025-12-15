@@ -49,49 +49,26 @@ const CompetitiveAPI = {
   },
 
   /**
-   * Process API response with dual outputs
+   * Process API response (out-3 = analysis, out-4 = score)
    */
   processResponse(data) {
     const outputs = data?.outputs || {};
 
-    const analysisKey = this.resolveOutputKey(outputs, ['out-3']);
-    const assessmentKey = this.resolveOutputKey(outputs, ['out-4']);
-
-    if (!analysisKey || !assessmentKey) {
-      throw new Error('Competitive API response missing required outputs');
-    }
-
-    // Validate response structure
-    const validation = Validators.validateApiResponse(data, [analysisKey, assessmentKey]);
+    // Competitive uses out-3 for analysis, out-4 for score
+    const validation = Validators.validateApiResponse(data, ['out-3', 'out-4']);
     if (!validation.valid) {
       throw new Error(validation.error);
     }
 
     // Parse the structured competitive analysis
-    let analysis;
-    try {
-      const analysisRaw = outputs[analysisKey];
-      if (typeof analysisRaw === 'string') {
-        analysis = JSON.parse(analysisRaw);
-      } else {
-        analysis = analysisRaw;
-      }
-    } catch (error) {
-      console.error('Failed to parse competitive analysis:', error);
+    const analysis = this.parseOutput(outputs['out-3'], 'competitive analysis');
+    if (!analysis || typeof analysis !== 'object') {
       throw new Error('Invalid competitive analysis format');
     }
 
     // Parse the graded assessment
-    let assessment;
-    try {
-      const assessmentRaw = outputs[assessmentKey];
-      if (typeof assessmentRaw === 'string') {
-        assessment = JSON.parse(assessmentRaw);
-      } else {
-        assessment = assessmentRaw;
-      }
-    } catch (error) {
-      console.error('Failed to parse competitive assessment:', error);
+    const assessment = this.parseOutput(outputs['out-4'], 'competitive assessment');
+    if (!assessment || typeof assessment !== 'object') {
       throw new Error('Invalid competitive assessment format');
     }
 
@@ -115,6 +92,46 @@ const CompetitiveAPI = {
   },
 
   /**
+   * Parse output that may be string or object
+   */
+  parseOutput(raw, label) {
+    if (!raw) return null;
+
+    if (typeof raw === 'object') {
+      if (raw.text && typeof raw.text === 'string') {
+        return this.parseOutput(raw.text, label);
+      }
+      return raw;
+    }
+
+    if (typeof raw !== 'string') {
+      return null;
+    }
+
+    let trimmed = raw.trim();
+    if (!trimmed) return null;
+
+    // Clean up markdown code blocks
+    if (trimmed.startsWith('```json')) {
+      trimmed = trimmed.slice(7);
+    }
+    if (trimmed.startsWith('```')) {
+      trimmed = trimmed.slice(3);
+    }
+    if (trimmed.endsWith('```')) {
+      trimmed = trimmed.slice(0, -3);
+    }
+    trimmed = trimmed.trim();
+
+    try {
+      return JSON.parse(trimmed);
+    } catch (error) {
+      console.error(`Failed to parse ${label}:`, error);
+      return null;
+    }
+  },
+
+  /**
    * Ensure required fields exist
    */
   ensureRequiredFields(analysis, assessment) {
@@ -135,9 +152,6 @@ const CompetitiveAPI = {
     }
 
     // Normalize market overview totals
-    if (!analysis.market_overview) {
-      analysis.market_overview = {};
-    }
     const overview = analysis.market_overview;
 
     const defaultTotals = {
@@ -289,17 +303,6 @@ const CompetitiveAPI = {
       dataDate: analysis.data_quality?.data_date || new Date().toISOString(),
       sources: analysis.data_quality?.sources_used || []
     };
-  },
-
-  /**
-   * Resolve the first output key present in the response
-   */
-  resolveOutputKey(outputs, candidates) {
-    if (!outputs || typeof outputs !== 'object') {
-      return null;
-    }
-
-    return candidates.find(key => key in outputs) || null;
   },
 
   /**

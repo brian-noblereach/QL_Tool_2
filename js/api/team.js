@@ -44,7 +44,7 @@ const TeamAPI = {
   },
 
   /**
-   * Process API response (out-0 detailed team, out-1 scoring summary)
+   * Process API response (out-0 = analysis, out-1 = score)
    */
   processResponse(data) {
     const validation = Validators.validateApiResponse(data, ['out-0', 'out-1']);
@@ -104,8 +104,20 @@ const TeamAPI = {
       return null;
     }
 
-    const trimmed = rawOutput.trim();
+    let trimmed = rawOutput.trim();
     if (!trimmed) return null;
+
+    // Clean up markdown code blocks
+    if (trimmed.startsWith('```json')) {
+      trimmed = trimmed.slice(7);
+    }
+    if (trimmed.startsWith('```')) {
+      trimmed = trimmed.slice(3);
+    }
+    if (trimmed.endsWith('```')) {
+      trimmed = trimmed.slice(0, -3);
+    }
+    trimmed = trimmed.trim();
 
     const tryParse = (text) => {
       try {

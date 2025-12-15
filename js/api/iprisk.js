@@ -49,7 +49,7 @@ const IPRiskAPI = {
   },
 
   /**
-   * Process API response
+   * Process API response (out-1 = analysis, out-2 = score)
    */
   processResponse(data) {
     const validation = Validators.validateApiResponse(data, ['out-1', 'out-2']);
@@ -88,22 +88,42 @@ const IPRiskAPI = {
   parseOutput(rawOutput) {
     if (!rawOutput) return null;
 
-    try {
-      if (typeof rawOutput === 'string') {
-        return JSON.parse(rawOutput);
-      }
-
-      if (typeof rawOutput === 'object') {
-        if (rawOutput.text && typeof rawOutput.text === 'string') {
+    if (typeof rawOutput === 'object') {
+      if (rawOutput.text && typeof rawOutput.text === 'string') {
+        try {
           return JSON.parse(rawOutput.text);
+        } catch (e) {
+          return null;
         }
-        return rawOutput;
       }
-    } catch (error) {
-      console.error('Failed to parse IP risk output:', error);
+      return rawOutput;
     }
 
-    return null;
+    if (typeof rawOutput !== 'string') {
+      return null;
+    }
+
+    let trimmed = rawOutput.trim();
+    if (!trimmed) return null;
+
+    // Clean up markdown code blocks
+    if (trimmed.startsWith('```json')) {
+      trimmed = trimmed.slice(7);
+    }
+    if (trimmed.startsWith('```')) {
+      trimmed = trimmed.slice(3);
+    }
+    if (trimmed.endsWith('```')) {
+      trimmed = trimmed.slice(0, -3);
+    }
+    trimmed = trimmed.trim();
+
+    try {
+      return JSON.parse(trimmed);
+    } catch (error) {
+      console.error('Failed to parse IP risk output:', error);
+      return null;
+    }
   },
 
   /**
@@ -399,7 +419,7 @@ const IPRiskAPI = {
     };
 
     return rubric[score] || 'No rubric description available';
-  },
+  }
 };
 
 // Make available globally

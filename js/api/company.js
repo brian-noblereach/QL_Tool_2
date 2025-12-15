@@ -41,17 +41,29 @@ const CompanyAPI = {
   },
 
   processResponse(data) {
-    const validation = Validators.validateApiResponse(data, ['out-0']);
+    // Company output is at out-6
+    const validation = Validators.validateApiResponse(data, ['out-6']);
     if (!validation.valid) {
       throw new Error(validation.error);
     }
 
-    const rawOutput = data.outputs['out-0'];
+    const rawOutput = data.outputs['out-6'];
     let parsed;
 
     if (typeof rawOutput === 'string') {
       try {
-        parsed = JSON.parse(rawOutput);
+        // Clean up potential markdown code blocks
+        let cleaned = rawOutput.trim();
+        if (cleaned.startsWith('```json')) {
+          cleaned = cleaned.slice(7);
+        }
+        if (cleaned.startsWith('```')) {
+          cleaned = cleaned.slice(3);
+        }
+        if (cleaned.endsWith('```')) {
+          cleaned = cleaned.slice(0, -3);
+        }
+        parsed = JSON.parse(cleaned.trim());
       } catch (error) {
         console.error('Failed to parse company data:', error);
         throw new Error('Invalid company data format');
