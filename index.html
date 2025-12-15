@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Venture Assessment | NobleReach</title>
+  
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://api.fontshare.com">
+  <link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&f[]=clash-display@500,600,700&display=swap" rel="stylesheet">
+  
+  <!-- Styles -->
+  <link rel="stylesheet" href="css/styles.css">
+  
+  <!-- jsPDF for export -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+  <!-- Pilot Banner -->
+  <div id="pilot-banner" class="pilot-banner">
+    <div class="pilot-banner-content">
+      <span class="pilot-badge">PILOT</span>
+      <span class="pilot-text">This tool is in pilot testing. Your feedback helps us improve.</span>
+      <button id="feedback-btn" class="pilot-feedback-btn">Give Feedback</button>
+      <button id="pilot-close" class="pilot-close" aria-label="Close banner">&times;</button>
+    </div>
+  </div>
+
+  <!-- Main Container -->
+  <div class="container">
+    <!-- Top Bar -->
+    <header class="topbar">
+      <div class="brand">
+        <img src="assets/logo-icon.svg" alt="NobleReach" class="nr-logo" width="36" height="36">
+        <h1 class="brand-title">NobleReach<span class="tm">™</span> Venture Assessment</h1>
+        <span class="version-badge">PILOT</span>
+      </div>
+      <div class="topbar-actions">
+        <button id="new-assessment-btn" class="btn outline" title="Start new assessment">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 5v14M5 12h14"/>
+          </svg>
+          New
+        </button>
+        <button id="export-btn" class="btn" title="Export to PDF" disabled>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+          </svg>
+          Export PDF
+        </button>
+      </div>
+    </header>
+
+    <!-- Input Section -->
+    <section id="input-section" class="input-section">
+      <div class="input-container">
+        <div class="input-header">
+          <h2>Venture Assessment</h2>
+          <p>Enter a company website URL to begin the AI-powered analysis. The assessment takes approximately 8-12 minutes to complete.</p>
+        </div>
+        
+        <form id="assessment-form" class="assessment-form">
+          <div class="form-row">
+            <div class="form-group flex-1">
+              <label for="company-url">Company Website URL</label>
+              <input 
+                type="url" 
+                id="company-url" 
+                name="company-url" 
+                placeholder="https://example.com"
+                required
+                autocomplete="url"
+              >
+              <span class="input-hint">Enter the main website URL for the company you want to assess</span>
+            </div>
+          </div>
+          
+          <div class="form-row">
+            <div class="form-group flex-1">
+              <label for="sca-name">Advisor Name</label>
+              <input 
+                type="text" 
+                id="sca-name" 
+                name="sca-name" 
+                placeholder="e.g., John Smith"
+                required
+              >
+              <span class="input-hint">This will appear on the exported report</span>
+            </div>
+            <div class="form-group flex-1">
+              <label for="portfolio">Portfolio / Cohort</label>
+              <select 
+                id="portfolio" 
+                name="portfolio"
+                class="form-select"
+              >
+                <option value="">Select Portfolio</option>
+                <option value="Northeastern CRI - 2026">Northeastern CRI - 2026</option>
+                <option value="Penn State GAP - 2026">Penn State GAP - 2026</option>
+              </select>
+              <span class="input-hint">Group ventures for comparison (optional)</span>
+            </div>
+          </div>
+          
+          <div class="form-actions">
+            <button type="submit" id="start-btn" class="btn primary large">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <polygon points="10 8 16 12 10 16 10 8" fill="currentColor" stroke="none"/>
+              </svg>
+              Start Assessment
+            </button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- Progress Section (shown during analysis) -->
+    <section id="progress-section" class="progress-section hidden">
+      <div class="progress-container">
+        <div class="progress-header">
+          <h2>Analysis in Progress</h2>
+          <p id="progress-company-name">Analyzing company...</p>
+        </div>
+        
+        <div class="progress-bar-container">
+          <div class="progress-bar">
+            <div id="progress-fill" class="progress-fill" style="width: 0%"></div>
+          </div>
+          <div class="progress-stats">
+            <span id="progress-percentage">0%</span>
+            <span id="progress-time">Estimated: ~10 min</span>
+          </div>
+        </div>
+        
+        <div class="phase-list" id="phase-list">
+          <div class="phase-item" data-phase="company">
+            <span class="phase-icon pending">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+              </svg>
+            </span>
+            <span class="phase-name">Company Overview</span>
+            <span class="phase-status">Pending</span>
+          </div>
+          <div class="phase-item" data-phase="team">
+            <span class="phase-icon pending">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+              </svg>
+            </span>
+            <span class="phase-name">Team Analysis</span>
+            <span class="phase-status">Pending</span>
+          </div>
+          <div class="phase-item" data-phase="funding">
+            <span class="phase-icon pending">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+              </svg>
+            </span>
+            <span class="phase-name">Funding Analysis</span>
+            <span class="phase-status">Pending</span>
+          </div>
+          <div class="phase-item" data-phase="competitive">
+            <span class="phase-icon pending">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+              </svg>
+            </span>
+            <span class="phase-name">Competitive Risk</span>
+            <span class="phase-status">Pending</span>
+          </div>
+          <div class="phase-item" data-phase="market">
+            <span class="phase-icon pending">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+              </svg>
+            </span>
+            <span class="phase-name">Market Opportunity</span>
+            <span class="phase-status">Pending</span>
+          </div>
+          <div class="phase-item" data-phase="iprisk">
+            <span class="phase-icon pending">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+              </svg>
+            </span>
+            <span class="phase-name">IP Risk</span>
+            <span class="phase-status">Pending</span>
+          </div>
+        </div>
+        
+        <div class="progress-actions">
+          <button id="cancel-btn" class="btn outline danger">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M15 9l-6 6M9 9l6 6"/>
+            </svg>
+            Cancel Analysis
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Results Section (shown after analysis starts completing) -->
+    <section id="results-section" class="results-section hidden">
+      <!-- Compact Progress Bar (shown while some phases still running) -->
+      <div id="compact-progress" class="compact-progress hidden">
+        <div class="compact-progress-inner">
+          <span class="compact-progress-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="spin">
+              <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+            </svg>
+          </span>
+          <span id="compact-progress-text">4 of 6 complete</span>
+          <div class="compact-progress-bar">
+            <div id="compact-progress-fill" class="compact-progress-fill" style="width: 66%"></div>
+          </div>
+          <span id="compact-progress-time">~8 min remaining</span>
+        </div>
+      </div>
+
+      <!-- Tab Navigation -->
+      <nav class="tab-nav" role="tablist">
+        <button class="tab-btn" data-tab="overview" role="tab" aria-selected="false" disabled>
+          <span class="tab-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="18" height="18" rx="2"/>
+              <path d="M3 9h18M9 21V9"/>
+            </svg>
+          </span>
+          <span class="tab-label">Overview</span>
+          <span class="tab-status pending"></span>
+        </button>
+        <button class="tab-btn" data-tab="team" role="tab" aria-selected="false" disabled>
+          <span class="tab-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+              <circle cx="9" cy="7" r="4"/>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+          </span>
+          <span class="tab-label">Team</span>
+          <span class="tab-status pending"></span>
+        </button>
+        <button class="tab-btn" data-tab="funding" role="tab" aria-selected="false" disabled>
+          <span class="tab-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="1" x2="12" y2="23"/>
+              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+            </svg>
+          </span>
+          <span class="tab-label">Funding</span>
+          <span class="tab-status pending"></span>
+        </button>
+        <button class="tab-btn" data-tab="competitive" role="tab" aria-selected="false" disabled>
+          <span class="tab-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+            </svg>
+          </span>
+          <span class="tab-label">Competitive</span>
+          <span class="tab-status pending"></span>
+        </button>
+        <button class="tab-btn" data-tab="market" role="tab" aria-selected="false" disabled>
+          <span class="tab-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="20" x2="18" y2="10"/>
+              <line x1="12" y1="20" x2="12" y2="4"/>
+              <line x1="6" y1="20" x2="6" y2="14"/>
+            </svg>
+          </span>
+          <span class="tab-label">Market</span>
+          <span class="tab-status pending"></span>
+        </button>
+        <button class="tab-btn" data-tab="iprisk" role="tab" aria-selected="false" disabled>
+          <span class="tab-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+          </span>
+          <span class="tab-label">IP Risk</span>
+          <span class="tab-status pending"></span>
+        </button>
+        <button class="tab-btn" data-tab="summary" role="tab" aria-selected="false" disabled>
+          <span class="tab-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+              <polyline points="10 9 9 9 8 9"/>
+            </svg>
+          </span>
+          <span class="tab-label">Summary</span>
+          <span class="tab-status pending"></span>
+        </button>
+      </nav>
+
+      <!-- Tab Content Panels -->
+      <div class="tab-panels">
+        <!-- Overview Panel -->
+        <div id="panel-overview" class="tab-panel" role="tabpanel" hidden>
+          <div class="panel-header">
+            <h2>Company Overview</h2>
+          </div>
+          <div class="panel-content" id="overview-content">
+            <!-- Populated by JavaScript -->
+          </div>
+        </div>
+
+        <!-- Team Panel -->
+        <div id="panel-team" class="tab-panel" role="tabpanel" hidden>
+          <div class="panel-header">
+            <h2>Team Assessment</h2>
+            <div class="score-badge" id="team-score-badge">
+              <span class="score-label">AI Score</span>
+              <span class="score-value" id="team-ai-score">-</span>
+            </div>
+          </div>
+          <div class="panel-content">
+            <div class="assessment-layout">
+              <div class="evidence-section">
+                <div class="view-toggles">
+                  <button class="view-toggle-btn active" data-view="summary">Summary</button>
+                  <button class="view-toggle-btn" data-view="detailed">Detailed</button>
+                  <button class="view-toggle-btn" data-view="sources">Sources</button>
+                </div>
+                <div id="team-evidence" class="evidence-container">
+                  <!-- Populated by JavaScript -->
+                </div>
+              </div>
+              <div class="scoring-section">
+                <div class="scoring-card">
+                  <h3>Your Assessment</h3>
+                  <div class="score-slider-container">
+                    <label for="team-score-slider">Score (1-9)</label>
+                    <input type="range" id="team-score-slider" min="1" max="9" value="5" class="score-slider">
+                    <div class="score-display">
+                      <span id="team-user-score" class="user-score">5</span>
+                    </div>
+                  </div>
+                  <div id="team-rubric" class="rubric-display">
+                    <!-- Rubric definition appears here -->
+                  </div>
+                  <div class="score-deviation hidden" id="team-deviation">
+                    <span class="deviation-icon">⚠️</span>
+                    <span class="deviation-text">Your score differs from AI by <span class="deviation-value">0</span></span>
+                  </div>
+                  <div class="justification-container">
+                    <label for="team-justification">Justification (optional)</label>
+                    <textarea id="team-justification" rows="3" placeholder="Explain your reasoning..."></textarea>
+                  </div>
+                  <button id="team-submit-btn" class="btn primary submit-btn">Submit Assessment</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Funding Panel -->
+        <div id="panel-funding" class="tab-panel" role="tabpanel" hidden>
+          <div class="panel-header">
+            <h2>Funding Assessment</h2>
+            <div class="score-badge" id="funding-score-badge">
+              <span class="score-label">AI Score</span>
+              <span class="score-value" id="funding-ai-score">-</span>
+            </div>
+          </div>
+          <div class="panel-content">
+            <div class="assessment-layout">
+              <div class="evidence-section">
+                <div class="view-toggles">
+                  <button class="view-toggle-btn active" data-view="summary">Summary</button>
+                  <button class="view-toggle-btn" data-view="detailed">Detailed</button>
+                  <button class="view-toggle-btn" data-view="sources">Sources</button>
+                </div>
+                <div id="funding-evidence" class="evidence-container">
+                  <!-- Populated by JavaScript -->
+                </div>
+              </div>
+              <div class="scoring-section">
+                <div class="scoring-card">
+                  <h3>Your Assessment</h3>
+                  <div class="score-slider-container">
+                    <label for="funding-score-slider">Score (1-9)</label>
+                    <input type="range" id="funding-score-slider" min="1" max="9" value="5" class="score-slider">
+                    <div class="score-display">
+                      <span id="funding-user-score" class="user-score">5</span>
+                    </div>
+                  </div>
+                  <div id="funding-rubric" class="rubric-display">
+                    <!-- Rubric definition appears here -->
+                  </div>
+                  <div class="score-deviation hidden" id="funding-deviation">
+                    <span class="deviation-icon">⚠️</span>
+                    <span class="deviation-text">Your score differs from AI by <span class="deviation-value">0</span></span>
+                  </div>
+                  <div class="justification-container">
+                    <label for="funding-justification">Justification (optional)</label>
+                    <textarea id="funding-justification" rows="3" placeholder="Explain your reasoning..."></textarea>
+                  </div>
+                  <button id="funding-submit-btn" class="btn primary submit-btn">Submit Assessment</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Competitive Panel -->
+        <div id="panel-competitive" class="tab-panel" role="tabpanel" hidden>
+          <div class="panel-header">
+            <h2>Competitive Risk Assessment</h2>
+            <div class="score-badge" id="competitive-score-badge">
+              <span class="score-label">AI Score</span>
+              <span class="score-value" id="competitive-ai-score">-</span>
+            </div>
+          </div>
+          <div class="panel-content">
+            <div class="assessment-layout">
+              <div class="evidence-section">
+                <div class="view-toggles">
+                  <button class="view-toggle-btn active" data-view="summary">Summary</button>
+                  <button class="view-toggle-btn" data-view="detailed">Detailed</button>
+                  <button class="view-toggle-btn" data-view="sources">Sources</button>
+                </div>
+                <div id="competitive-evidence" class="evidence-container">
+                  <!-- Populated by JavaScript -->
+                </div>
+              </div>
+              <div class="scoring-section">
+                <div class="scoring-card">
+                  <h3>Your Assessment</h3>
+                  <div class="score-slider-container">
+                    <label for="competitive-score-slider">Score (1-9)</label>
+                    <input type="range" id="competitive-score-slider" min="1" max="9" value="5" class="score-slider">
+                    <div class="score-display">
+                      <span id="competitive-user-score" class="user-score">5</span>
+                    </div>
+                  </div>
+                  <div id="competitive-rubric" class="rubric-display">
+                    <!-- Rubric definition appears here -->
+                  </div>
+                  <div class="score-deviation hidden" id="competitive-deviation">
+                    <span class="deviation-icon">⚠️</span>
+                    <span class="deviation-text">Your score differs from AI by <span class="deviation-value">0</span></span>
+                  </div>
+                  <div class="justification-container">
+                    <label for="competitive-justification">Justification (optional)</label>
+                    <textarea id="competitive-justification" rows="3" placeholder="Explain your reasoning..."></textarea>
+                  </div>
+                  <button id="competitive-submit-btn" class="btn primary submit-btn">Submit Assessment</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Market Panel -->
+        <div id="panel-market" class="tab-panel" role="tabpanel" hidden>
+          <div class="panel-header">
+            <h2>Market Opportunity Assessment</h2>
+            <div class="score-badge" id="market-score-badge">
+              <span class="score-label">AI Score</span>
+              <span class="score-value" id="market-ai-score">-</span>
+            </div>
+          </div>
+          <div class="panel-content">
+            <div class="assessment-layout">
+              <div class="evidence-section">
+                <div class="view-toggles">
+                  <button class="view-toggle-btn active" data-view="summary">Summary</button>
+                  <button class="view-toggle-btn" data-view="detailed">Detailed</button>
+                  <button class="view-toggle-btn" data-view="sources">Sources</button>
+                </div>
+                <div id="market-evidence" class="evidence-container">
+                  <!-- Populated by JavaScript -->
+                </div>
+              </div>
+              <div class="scoring-section">
+                <div class="scoring-card">
+                  <h3>Your Assessment</h3>
+                  <div class="score-slider-container">
+                    <label for="market-score-slider">Score (1-9)</label>
+                    <input type="range" id="market-score-slider" min="1" max="9" value="5" class="score-slider">
+                    <div class="score-display">
+                      <span id="market-user-score" class="user-score">5</span>
+                    </div>
+                  </div>
+                  <div id="market-rubric" class="rubric-display">
+                    <!-- Rubric definition appears here -->
+                  </div>
+                  <div class="score-deviation hidden" id="market-deviation">
+                    <span class="deviation-icon">⚠️</span>
+                    <span class="deviation-text">Your score differs from AI by <span class="deviation-value">0</span></span>
+                  </div>
+                  <div class="justification-container">
+                    <label for="market-justification">Justification (optional)</label>
+                    <textarea id="market-justification" rows="3" placeholder="Explain your reasoning..."></textarea>
+                  </div>
+                  <button id="market-submit-btn" class="btn primary submit-btn">Submit Assessment</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- IP Risk Panel -->
+        <div id="panel-iprisk" class="tab-panel" role="tabpanel" hidden>
+          <div class="panel-header">
+            <h2>IP Risk Assessment</h2>
+            <div class="score-badge" id="iprisk-score-badge">
+              <span class="score-label">AI Score</span>
+              <span class="score-value" id="iprisk-ai-score">-</span>
+            </div>
+          </div>
+          <div class="panel-content">
+            <div class="assessment-layout">
+              <div class="evidence-section">
+                <div class="view-toggles">
+                  <button class="view-toggle-btn active" data-view="summary">Summary</button>
+                  <button class="view-toggle-btn" data-view="detailed">Detailed</button>
+                  <button class="view-toggle-btn" data-view="sources">Sources</button>
+                </div>
+                <div id="iprisk-evidence" class="evidence-container">
+                  <!-- Populated by JavaScript -->
+                </div>
+              </div>
+              <div class="scoring-section">
+                <div class="scoring-card">
+                  <h3>Your Assessment</h3>
+                  <div class="score-slider-container">
+                    <label for="iprisk-score-slider">Score (1-9)</label>
+                    <input type="range" id="iprisk-score-slider" min="1" max="9" value="5" class="score-slider">
+                    <div class="score-display">
+                      <span id="iprisk-user-score" class="user-score">5</span>
+                    </div>
+                  </div>
+                  <div id="iprisk-rubric" class="rubric-display">
+                    <!-- Rubric definition appears here -->
+                  </div>
+                  <div class="score-deviation hidden" id="iprisk-deviation">
+                    <span class="deviation-icon">⚠️</span>
+                    <span class="deviation-text">Your score differs from AI by <span class="deviation-value">0</span></span>
+                  </div>
+                  <div class="justification-container">
+                    <label for="iprisk-justification">Justification (optional)</label>
+                    <textarea id="iprisk-justification" rows="3" placeholder="Explain your reasoning..."></textarea>
+                  </div>
+                  <button id="iprisk-submit-btn" class="btn primary submit-btn">Submit Assessment</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Summary Panel -->
+        <div id="panel-summary" class="tab-panel" role="tabpanel" hidden>
+          <div class="panel-header">
+            <h2>Assessment Summary</h2>
+          </div>
+          <div class="panel-content" id="summary-content">
+            <!-- Populated by JavaScript -->
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+
+  <!-- Modal Overlay -->
+  <div id="modal-overlay" class="modal-overlay">
+    <div id="modal-content" class="modal-content" role="dialog" aria-modal="true">
+      <!-- Modal content injected by JavaScript -->
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <!-- Utilities -->
+  <script src="js/utils/validators.js"></script>
+  <script src="js/utils/formatters.js"></script>
+  <script src="js/utils/export.js"></script>
+  <script src="js/utils/sharepoint.js"></script>
+  <script src="js/utils/smartsheet.js"></script>
+  
+  <!-- Config -->
+  <script src="js/config/sharepoint-config.js"></script>
+  
+  <!-- API Layer -->
+  <script src="js/api/stack-proxy.js"></script>
+  <script src="js/api/company.js"></script>
+  <script src="js/api/team.js"></script>
+  <script src="js/api/funding.js"></script>
+  <script src="js/api/competitive.js"></script>
+  <script src="js/api/market.js"></script>
+  <script src="js/api/iprisk.js"></script>
+  
+  <!-- Components -->
+  <script src="js/components/tab-manager.js"></script>
+  <script src="js/components/toast-manager.js"></script>
+  <script src="js/components/modal-manager.js"></script>
+  <script src="js/components/progress-view.js"></script>
+  <script src="js/components/assessment-view.js"></script>
+  <script src="js/components/summary-view.js"></script>
+  
+  <!-- Core -->
+  <script src="js/core/state-manager.js"></script>
+  <script src="js/core/pipeline.js"></script>
+  <script src="js/core/app.js"></script>
+</body>
+</html>
