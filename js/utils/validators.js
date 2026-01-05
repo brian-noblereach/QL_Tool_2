@@ -7,27 +7,54 @@ const Validators = {
       return { valid: false, error: 'Invalid company data structure' };
     }
 
-    const requiredFields = ['company_overview', 'technology', 'products_and_applications', 'market_context'];
+    // Check for required top-level sections (be flexible about structure)
+    const hasOverview = data.company_overview || data.overview || data.company;
+    const hasTechnology = data.technology || data.tech;
+    const hasProducts = data.products_and_applications || data.products;
+    const hasMarket = data.market_context || data.market;
 
-    for (const field of requiredFields) {
-      if (!data[field]) {
-        return { valid: false, error: `Missing required field: ${field}` };
+    // Log what we received for debugging
+    console.log('[Validators] Company data keys:', Object.keys(data));
+    if (hasOverview) {
+      console.log('[Validators] Overview keys:', Object.keys(hasOverview));
+    }
+
+    // Relaxed validation - just need some company identifying info
+    const overview = data.company_overview || data.overview || data.company || {};
+    
+    // Accept various field names for company name
+    const companyName = overview.name || 
+                        overview.company_name || 
+                        overview.venture_name ||
+                        data.company_name ||
+                        data.name;
+    
+    // Accept various field names for website  
+    const website = overview.website || 
+                    overview.company_website ||
+                    overview.url ||
+                    data.website;
+
+    // Only require that we have SOME identifying info
+    if (!companyName && !website && !overview.company_description && !overview.description) {
+      return { valid: false, error: 'Company data missing identifying information (name, website, or description)' };
+    }
+
+    // Website validation is optional - only validate if present
+    if (website) {
+      try {
+        // Handle cases where website might not have protocol
+        const urlToTest = website.startsWith('http') ? website : 'https://' + website;
+        new URL(urlToTest);
+      } catch {
+        // Log but don't fail - website format issues shouldn't block the analysis
+        console.warn('[Validators] Website URL may be invalid:', website);
       }
     }
 
-    const overview = data.company_overview;
-    if (!overview.name || !overview.website) {
-      return { valid: false, error: 'Company must have name and website' };
-    }
-
-    try {
-      new URL(overview.website);
-    } catch {
-      return { valid: false, error: 'Invalid company website URL' };
-    }
-
-    if (!data.technology.core_technology) {
-      return { valid: false, error: 'Missing core technology description' };
+    // Core technology is nice to have but not strictly required
+    if (hasTechnology && !hasTechnology.core_technology && !hasTechnology.description) {
+      console.warn('[Validators] Missing core technology description');
     }
 
     return { valid: true };

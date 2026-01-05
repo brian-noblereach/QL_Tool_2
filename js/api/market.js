@@ -7,10 +7,14 @@ const MarketAPI = {
 
   /**
    * Analyze market opportunity
+   * 
+   * @param {string} companyDescription - Short company description JSON from CompanyAPI
+   * @param {string|Object} competitiveAnalysis - Competitive analysis output
+   * @param {AbortSignal} abortSignal - Optional abort signal
    */
-  async analyze(techDescription, competitiveAnalysis, abortSignal = null) {
-    if (!techDescription || typeof techDescription !== 'string') {
-      throw new Error('Technology description is required');
+  async analyze(companyDescription, competitiveAnalysis, abortSignal = null) {
+    if (!companyDescription || typeof companyDescription !== 'string') {
+      throw new Error('Company description is required');
     }
 
     if (!competitiveAnalysis) {
@@ -24,7 +28,7 @@ const MarketAPI = {
 
     const payload = {
       'user_id': `market_${Date.now()}`,
-      'in-1': techDescription.trim(),
+      'in-1': companyDescription.trim(),
       'in-2': competitiveStr
     };
 
@@ -272,8 +276,95 @@ const MarketAPI = {
     // Ensure scoring structure
     if (!scoring.rubric_application) scoring.rubric_application = {};
     if (!scoring.justification) scoring.justification = {};
-    if (!scoring.data_quality) scoring.data_quality = {};
-    if (scoring.confidence === undefined) scoring.confidence = 0.7;
+    
+    // Normalize data quality with comprehensive handling
+    scoring.data_quality = this.normalizeDataQuality(scoring.data_quality, scoring, analysis);
+  },
+
+  /**
+   * Normalize data quality metadata (ported from v01 with ConfidenceUtil)
+   */
+  normalizeDataQuality(rawQuality, scoring, analysis) {
+    const now = new Date();
+    const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+    const normalizeArrayOfStrings = (value) => {
+      if (!value) return [];
+      const array = Array.isArray(value) ? value : [value];
+      return array
+        .map(item => (typeof item === 'string' ? item.trim() : ''))
+        .filter(Boolean);
+    };
+
+    // Merge data quality from analysis and scoring
+    const analysisQuality =
+      analysis && typeof analysis.data_quality === 'object' && analysis.data_quality !== null
+        ? { ...analysis.data_quality }
+        : {};
+    const providedQuality =
+      rawQuality && typeof rawQuality === 'object'
+        ? { ...rawQuality }
+        : {};
+
+    const dataQuality = { ...analysisQuality, ...providedQuality };
+
+    // Use centralized confidence normalization
+    const fallbackConfidence =
+      dataQuality.overall_confidence ??
+      scoring?.confidence ??
+      scoring?.confidence_level ??
+      scoring?.rubric_application?.confidence ??
+      null;
+
+    dataQuality.overall_confidence = ConfidenceUtil.normalizeLevel(fallbackConfidence) || 'Medium';
+
+    // Extract confidence justification
+    if (typeof dataQuality.confidence_justification !== 'string') {
+      dataQuality.confidence_justification = ConfidenceUtil.extractJustification(
+        scoring?.confidence_justification,
+        scoring?.justification?.confidence_context
+      );
+    } else {
+      dataQuality.confidence_justification = dataQuality.confidence_justification.trim();
+    }
+    if (!dataQuality.confidence_justification) {
+      dataQuality.confidence_justification = 'Confidence rationale not provided.';
+    }
+
+    // Normalize data date
+    if (typeof dataQuality.data_date !== 'string' || !/^\d{4}-\d{2}$/.test(dataQuality.data_date.trim())) {
+      dataQuality.data_date = defaultMonth;
+    } else {
+      dataQuality.data_date = dataQuality.data_date.trim();
+    }
+
+    // Normalize sources
+    dataQuality.sources_used = normalizeArrayOfStrings(dataQuality.sources_used);
+    if (dataQuality.sources_used.length === 0) {
+      const inferredSources = this.extractMarketSources(analysis);
+      dataQuality.sources_used = inferredSources.length > 0 ? inferredSources : ['Source not provided'];
+    }
+
+    return dataQuality;
+  },
+
+  /**
+   * Extract unique market sources for fallback data quality info
+   */
+  extractMarketSources(analysis) {
+    if (!analysis || !Array.isArray(analysis.markets)) {
+      return [];
+    }
+
+    const unique = new Set();
+    analysis.markets.forEach(market => {
+      const source = typeof market.source_url === 'string' ? market.source_url.trim() : '';
+      if (source) {
+        unique.add(source);
+      }
+    });
+
+    return Array.from(unique).slice(0, 5);
   },
 
   /**
@@ -295,7 +386,8 @@ const MarketAPI = {
     return {
       // Score and confidence
       score: scoring.score,
-      confidence: scoring.confidence,
+      confidence: scoring.data_quality.overall_confidence,
+      confidenceJustification: scoring.data_quality.confidence_justification || '',
       
       // Primary market
       primaryMarket: {
@@ -339,8 +431,10 @@ const MarketAPI = {
       },
       
       // Data quality
-      dataRecency: scoring.data_quality.data_recency || 'Unknown',
-      dataConcerns: scoring.data_quality.data_concerns || []
+      dataDate: scoring.data_quality.data_date || '',
+      dataRecency: scoring.data_quality.data_recency || scoring.data_quality.data_date || '',
+      dataConcerns: scoring.data_quality.data_concerns || [],
+      dataSources: scoring.data_quality.sources_used || []
     };
   },
 

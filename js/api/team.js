@@ -1,4 +1,5 @@
 // js/api/team.js - Team capability analysis API (Proxied)
+// Now uses company description as input instead of website URL
 
 const TeamAPI = {
   config: {
@@ -6,16 +7,24 @@ const TeamAPI = {
   },
 
   /**
-   * Analyze founding team using the company URL
+   * Analyze founding team using company description
+   * 
+   * @param {string} companyDescription - Short company description JSON from CompanyAPI
+   * @param {AbortSignal} abortSignal - Optional abort signal
    */
-  async analyze(url, abortSignal = null) {
-    if (!url || typeof url !== 'string') {
-      throw new Error('Valid company URL is required for team analysis');
+  async analyze(companyDescription, abortSignal = null) {
+    if (!companyDescription || typeof companyDescription !== 'string') {
+      throw new Error('Company description is required for team analysis');
+    }
+
+    // Ensure it's valid JSON or at least substantial text
+    if (companyDescription.trim().length < 20) {
+      throw new Error('Company description too short for team analysis');
     }
 
     const payload = {
       'user_id': `team_${Date.now()}`,
-      'in-0': url.trim()
+      'in-0': companyDescription.trim()
     };
 
     const controller = new AbortController();
@@ -26,7 +35,7 @@ const TeamAPI = {
     }
 
     try {
-      // Use proxy instead of direct API call
+      // Use proxy to call team workflow
       const data = await window.StackProxy.call('team', payload, controller.signal);
       
       clearTimeout(timeoutId);
@@ -44,7 +53,7 @@ const TeamAPI = {
   },
 
   /**
-   * Process API response (out-0 = analysis, out-1 = score)
+   * Process API response (out-0 = team roster, out-1 = team score)
    */
   processResponse(data) {
     const validation = Validators.validateApiResponse(data, ['out-0', 'out-1']);
@@ -168,8 +177,10 @@ const TeamAPI = {
   ensureRequiredFields(team, scoring) {
     team.team_members = Array.isArray(team.team_members) ? team.team_members : [];
     team.trusted_sources = Array.isArray(team.trusted_sources) ? team.trusted_sources : [];
-    team.data_confidence =
-      typeof team.data_confidence === 'number' ? team.data_confidence : null;
+
+    // Use centralized confidence normalization
+    team.data_confidence = ConfidenceUtil.extractFromResponse(team, scoring);
+    team.confidence_justification = ConfidenceUtil.extractJustificationFromResponse(team, scoring);
 
     team.team_members = team.team_members.map(member => ({
       name: member?.name || 'Unknown',
@@ -201,6 +212,7 @@ const TeamAPI = {
       ventureName: team.venture_name || '-',
       justification: scoring.score_justification || '',
       confidence: team.data_confidence,
+      confidenceJustification: team.confidence_justification || '',
       teamComposition: {
         total: scoring.team_composition.total_members || team.team_members.length,
         technical: scoring.team_composition.technical_experts || 0,

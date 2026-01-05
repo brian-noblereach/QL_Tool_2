@@ -6,16 +6,19 @@ const IPRiskAPI = {
   },
 
   /**
-   * Analyze IP risk using a company or technology description
+   * Analyze IP risk using company description
+   * 
+   * @param {string} companyDescription - Short company description JSON from CompanyAPI
+   * @param {AbortSignal} abortSignal - Optional abort signal
    */
-  async analyze(techDescription, abortSignal = null) {
-    if (!techDescription || typeof techDescription !== 'string') {
-      throw new Error('Technology summary is required for IP risk analysis');
+  async analyze(companyDescription, abortSignal = null) {
+    if (!companyDescription || typeof companyDescription !== 'string') {
+      throw new Error('Company description is required for IP risk analysis');
     }
 
-    const trimmed = techDescription.trim();
-    if (trimmed.length < 40) {
-      throw new Error('Technology summary too short for IP risk analysis');
+    const trimmed = companyDescription.trim();
+    if (trimmed.length < 20) {
+      throw new Error('Company description too short for IP risk analysis');
     }
 
     const payload = {
@@ -174,6 +177,10 @@ const IPRiskAPI = {
     if (summary.data_confidence !== undefined) {
       report.dataConfidence = report.dataConfidence ?? summary.data_confidence;
     }
+    
+    if (summary.confidence_justification !== undefined) {
+      report.confidenceJustification = report.confidenceJustification ?? summary.confidence_justification;
+    }
   },
 
   /**
@@ -231,9 +238,22 @@ const IPRiskAPI = {
       table.patentApplications = [];
     }
 
-    if (typeof report.dataConfidence !== 'number') {
-      report.dataConfidence = null;
+    // Initialize data quality object if not present
+    if (!report.dataQuality) {
+      report.dataQuality = {};
     }
+
+    // Use centralized confidence normalization
+    report.dataConfidence = ConfidenceUtil.normalizeLevel(
+      report.dataConfidence ?? 
+      report.data_confidence ?? 
+      report.dataQuality?.overall_confidence
+    );
+    
+    report.confidenceJustification = ConfidenceUtil.extractJustification(
+      report.confidenceJustification,
+      report.dataQuality?.confidence_justification
+    );
   },
 
   /**
@@ -369,6 +389,13 @@ const IPRiskAPI = {
     if (report.data_confidence !== undefined && report.dataConfidence === undefined) {
       report.dataConfidence = report.data_confidence;
     }
+
+    if (report.data_quality && typeof report.data_quality === 'object') {
+      report.dataQuality = {
+        ...(report.data_quality || {}),
+        ...(report.dataQuality || {})
+      };
+    }
   },
 
   /**
@@ -398,7 +425,8 @@ const IPRiskAPI = {
       })),
       awardedPatents: table.awardedPatents,
       pendingPatents: table.patentApplications,
-      dataConfidence: report.dataConfidence
+      dataConfidence: report.dataConfidence,
+      dataConfidenceJustification: report.confidenceJustification || ''
     };
   },
 

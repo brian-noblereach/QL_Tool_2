@@ -7,15 +7,18 @@ const FundingAPI = {
 
   /**
    * Analyze funding landscape and market deals
+   * 
+   * @param {string} companyDescription - Short company description JSON from CompanyAPI
+   * @param {AbortSignal} abortSignal - Optional abort signal
    */
-  async analyze(techDescription, abortSignal = null) {
-    if (!techDescription || typeof techDescription !== 'string') {
-      throw new Error('Technology description is required for funding analysis');
+  async analyze(companyDescription, abortSignal = null) {
+    if (!companyDescription || typeof companyDescription !== 'string') {
+      throw new Error('Company description is required for funding analysis');
     }
 
-    const trimmed = techDescription.trim();
-    if (trimmed.length < 40) {
-      throw new Error('Technology description too short for funding analysis');
+    const trimmed = companyDescription.trim();
+    if (trimmed.length < 20) {
+      throw new Error('Company description too short for funding analysis');
     }
 
     const payload = {
@@ -146,12 +149,9 @@ const FundingAPI = {
       ? analysis.market_deals
       : [];
 
-    if (typeof analysis.data_confidence !== 'number' || isNaN(analysis.data_confidence)) {
-      analysis.data_confidence = null;
-    } else {
-      // Clamp confidence to [0,1]
-      analysis.data_confidence = Math.max(0, Math.min(1, analysis.data_confidence));
-    }
+    // Use centralized confidence normalization
+    analysis.data_confidence = ConfidenceUtil.extractFromResponse(analysis, assessment);
+    analysis.confidence_justification = ConfidenceUtil.extractJustificationFromResponse(analysis, assessment);
 
     assessment.score_justification = assessment.score_justification || {};
     assessment.score_justification.funding_details =
@@ -165,6 +165,7 @@ const FundingAPI = {
    */
   formatForDisplay(analysis, assessment) {
     const confidence = analysis.data_confidence;
+    const confidenceJustification = analysis.confidence_justification || '';
     const justification = assessment.score_justification || {};
 
     const fundingRounds = analysis.venture_funding.funding_rounds.map(round => ({
@@ -200,10 +201,7 @@ const FundingAPI = {
       rubricLevel: justification.rubric_level || '',
       summary: justification.evidence_summary || '',
       confidence,
-      confidenceLabel:
-        typeof confidence === 'number'
-          ? `${Math.round(confidence * 100)}%`
-          : null,
+      confidenceJustification,
       researchTopic: analysis.research_topic || '',
       applicationArea: analysis.application_area || '',
       searchDate: analysis.search_date || null,

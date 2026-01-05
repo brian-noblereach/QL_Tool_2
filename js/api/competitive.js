@@ -7,15 +7,18 @@ const CompetitiveAPI = {
 
   /**
    * Analyze competitive landscape
+   * 
+   * @param {string} companyDescription - Short company description JSON from CompanyAPI
+   * @param {AbortSignal} abortSignal - Optional abort signal
    */
-  async analyze(techDescription, abortSignal = null) {
-    if (!techDescription || typeof techDescription !== 'string') {
-      throw new Error('Technology description is required');
+  async analyze(companyDescription, abortSignal = null) {
+    if (!companyDescription || typeof companyDescription !== 'string') {
+      throw new Error('Company description is required');
     }
 
-    const trimmed = techDescription.trim();
+    const trimmed = companyDescription.trim();
     if (trimmed.length < 20) {
-      throw new Error('Technology description too short');
+      throw new Error('Company description too short');
     }
 
     const payload = {
@@ -139,17 +142,29 @@ const CompetitiveAPI = {
     if (!analysis.market_overview) analysis.market_overview = {};
     if (!analysis.competitors) analysis.competitors = [];
     if (!analysis.competitive_analysis) analysis.competitive_analysis = {};
+    
+    // Initialize data_quality if missing
     if (!analysis.data_quality) {
       analysis.data_quality = {};
-    } else {
-      const confidence =
-        analysis.data_quality.overall_confidence ??
-        analysis.data_quality.confidence ??
-        analysis.data_quality.confidence_level;
-      if (confidence !== undefined) {
-        analysis.data_quality.overall_confidence = Number(confidence);
-      }
     }
+    
+    // Normalize sources_used to array
+    if (!Array.isArray(analysis.data_quality.sources_used)) {
+      analysis.data_quality.sources_used = analysis.data_quality.sources_used
+        ? [analysis.data_quality.sources_used].flat().filter(Boolean)
+        : [];
+    }
+    
+    // Normalize data_concerns to array
+    if (!Array.isArray(analysis.data_quality.data_concerns)) {
+      analysis.data_quality.data_concerns = analysis.data_quality.data_concerns
+        ? [analysis.data_quality.data_concerns].flat().filter(Boolean)
+        : [];
+    }
+
+    // Use centralized confidence normalization
+    analysis.data_confidence = ConfidenceUtil.extractFromResponse(analysis, assessment);
+    analysis.confidence_justification = ConfidenceUtil.extractJustificationFromResponse(analysis, assessment);
 
     // Normalize market overview totals
     const overview = analysis.market_overview;
@@ -258,6 +273,12 @@ const CompetitiveAPI = {
       ...(totals || {})
     };
 
+    const confidence = analysis.data_confidence;
+    const confidenceJustification = analysis.confidence_justification || '';
+    const dataDate = analysis.data_quality?.data_date || new Date().toISOString();
+    const dataConcerns = analysis.data_quality?.data_concerns || [];
+    const dataRecency = analysis.data_quality?.data_recency || analysis.data_quality?.data_date || '';
+
     // Build formatted response
     return {
       // Score and justification
@@ -295,12 +316,11 @@ const CompetitiveAPI = {
       marketGaps: analysis.competitive_analysis?.market_gaps || [],
       
       // Data quality
-      confidence:
-        analysis.data_quality?.overall_confidence ??
-        analysis.data_quality?.confidence ??
-        analysis.data_quality?.confidence_level ??
-        0.7,
-      dataDate: analysis.data_quality?.data_date || new Date().toISOString(),
+      confidence,
+      confidenceJustification,
+      dataDate,
+      dataConcerns,
+      dataRecency,
       sources: analysis.data_quality?.sources_used || []
     };
   },

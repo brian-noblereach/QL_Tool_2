@@ -1,5 +1,5 @@
 // js/core/pipeline.js - Sequential analysis pipeline manager
-// V02: Updated with event emission for progressive display
+// V02.1: Updated to support file uploads and short company description
 
 class AnalysisPipeline {
   constructor() {
@@ -7,7 +7,7 @@ class AnalysisPipeline {
       { 
         name: 'Company Analysis',
         key: 'company',
-        duration: 150,  // ~2.5 minutes (actual: 100-200s, runs first)
+        duration: 150,  // ~2.5 minutes
         status: 'pending',
         startTime: null,
         endTime: null,
@@ -17,7 +17,7 @@ class AnalysisPipeline {
       { 
         name: 'Team Analysis',
         key: 'team',
-        duration: 70,   // ~1 minute (actual: 40-100s, runs parallel)
+        duration: 70,   // ~1 minute
         status: 'pending',
         startTime: null,
         endTime: null,
@@ -27,7 +27,7 @@ class AnalysisPipeline {
       { 
         name: 'Funding Analysis',
         key: 'funding',
-        duration: 60,   // ~1 minute estimate (runs parallel)
+        duration: 60,   // ~1 minute
         status: 'pending',
         startTime: null,
         endTime: null,
@@ -37,7 +37,7 @@ class AnalysisPipeline {
       { 
         name: 'Competitive Analysis',
         key: 'competitive',
-        duration: 160,  // ~2.7 minutes (actual: 120-200s, runs parallel)
+        duration: 160,  // ~2.7 minutes
         status: 'pending',
         startTime: null,
         endTime: null,
@@ -47,7 +47,7 @@ class AnalysisPipeline {
       { 
         name: 'Market Analysis',
         key: 'market',
-        duration: 250,  // ~4 minutes (actual: 250s, waits for competitive)
+        duration: 250,  // ~4 minutes
         status: 'pending',
         startTime: null,
         endTime: null,
@@ -57,7 +57,7 @@ class AnalysisPipeline {
       { 
         name: 'IP Risk Analysis',
         key: 'iprisk',
-        duration: 60,   // ~1 minute (actual: 50-70s, runs parallel)
+        duration: 60,   // ~1 minute
         status: 'pending',
         startTime: null,
         endTime: null,
@@ -69,12 +69,12 @@ class AnalysisPipeline {
     this.startTime = null;
     this.abortController = null;
     this.companyUrl = null;
-    this.techDescription = null;
+    this.companyFile = null;
+    this.companyDescription = null;  // Short description for other APIs
     this.callbacks = {};
     this.isRunning = false;
     this.activePhases = new Set();
     
-    // V02: EventTarget for progressive display support
     this.events = new EventTarget();
   }
 
@@ -93,43 +93,50 @@ class AnalysisPipeline {
       this.callbacks[event](data);
     }
     
-    // V02: Also dispatch to EventTarget for component listeners
     this.events.dispatchEvent(new CustomEvent(event, { detail: data }));
   }
 
-  /**
-   * V02: Subscribe to events via EventTarget
-   * @param {string} event - Event name
-   * @param {Function} handler - Event handler
-   */
   addEventListener(event, handler) {
     this.events.addEventListener(event, handler);
   }
 
-  /**
-   * V02: Unsubscribe from events
-   * @param {string} event - Event name
-   * @param {Function} handler - Event handler
-   */
   removeEventListener(event, handler) {
     this.events.removeEventListener(event, handler);
   }
 
   /**
    * Start the analysis pipeline
+   * 
+   * @param {Object} options - Input options
+   * @param {string} options.url - Company website URL (optional)
+   * @param {File} options.file - Uploaded document (optional)
    */
-  async start(companyUrl) {
+  async start({ url, file } = {}) {
     if (this.isRunning) {
       throw new Error('Analysis already in progress');
     }
 
-    const validation = Validators.validateUrl(companyUrl);
-    if (!validation.valid) {
-      throw new Error(validation.error);
+    // Validate inputs - need at least one
+    const hasUrl = url && typeof url === 'string' && url.trim().length > 0;
+    const hasFile = file && file instanceof File;
+    
+    if (!hasUrl && !hasFile) {
+      throw new Error('Either a company URL or document is required');
     }
 
-    this.companyUrl = validation.url;
-    this.techDescription = null;
+    // Validate URL if provided
+    if (hasUrl) {
+      const validation = Validators.validateUrl(url);
+      if (!validation.valid) {
+        throw new Error(validation.error);
+      }
+      this.companyUrl = validation.url;
+    } else {
+      this.companyUrl = null;
+    }
+
+    this.companyFile = hasFile ? file : null;
+    this.companyDescription = null;
     this.startTime = Date.now();
     this.abortController = new AbortController();
     this.isRunning = true;
@@ -144,28 +151,31 @@ class AnalysisPipeline {
       delete phase.promise;
     });
 
-    this.emit('start', { url: this.companyUrl });
+    this.emit('start', { 
+      url: this.companyUrl, 
+      hasFile: hasFile,
+      fileName: hasFile ? file.name : null 
+    });
 
     try {
       // Company analysis must complete first
       await this.executePhase('company');
 
-      // V02: After company completes, emit event for UI to show overview
+      // Emit event for UI to show overview
       this.emit('overviewReady', {
         phase: 'company',
         data: this.phases.find(p => p.key === 'company')?.data
       });
 
-      // Run remaining analyses in parallel - use allSettled to prevent cascading failures
+      // Run remaining analyses in parallel
       const teamPromise = this.executePhase('team').catch(e => ({ error: e, phase: 'team' }));
       const fundingPromise = this.executePhase('funding').catch(e => ({ error: e, phase: 'funding' }));
       const competitivePromise = this.executePhase('competitive').catch(e => ({ error: e, phase: 'competitive' }));
       const ipRiskPromise = this.executePhase('iprisk').catch(e => ({ error: e, phase: 'iprisk' }));
 
-      // Market depends on competitive - only run if competitive succeeds
+      // Market depends on competitive
       const marketPromise = competitivePromise.then(result => {
         if (result?.error) {
-          // Competitive failed, skip market
           const phase = this.phases.find(p => p.key === 'market');
           phase.status = 'error';
           phase.error = new Error('Skipped: Competitive analysis failed');
@@ -183,17 +193,14 @@ class AnalysisPipeline {
         return this.executePhase('market').catch(e => ({ error: e, phase: 'market' }));
       });
 
-      // Wait for all to complete (successes and failures)
       await Promise.all([teamPromise, fundingPromise, competitivePromise, ipRiskPromise, marketPromise]);
 
-      // Check if all completed successfully
       const allSucceeded = this.phases.every(p => p.status === 'completed');
       
       if (allSucceeded) {
         this.emit('allComplete', this.getResults());
         this.emit('complete', this.getResults());
       } else {
-        // Some phases failed - emit partial complete
         const failedPhases = this.phases.filter(p => p.status === 'error').map(p => p.key);
         this.emit('partialComplete', {
           results: this.getResults(),
@@ -217,7 +224,7 @@ class AnalysisPipeline {
   }
 
   /**
-   * Run a single phase (supports concurrent execution)
+   * Run a single phase
    */
   executePhase(key) {
     const phase = this.phases.find(p => p.key === key);
@@ -272,7 +279,6 @@ class AnalysisPipeline {
         phase.status = 'completed';
         phase.endTime = Date.now();
 
-        // V02: Enhanced phaseComplete event with canRetry flag
         this.emit('phaseComplete', {
           phase: phase.key,
           name: phase.name,
@@ -288,7 +294,6 @@ class AnalysisPipeline {
         phase.error = error;
         phase.endTime = Date.now();
 
-        // V02: Enhanced phaseError event with canRetry flag
         this.emit('phaseError', {
           phase: phase.key,
           name: phase.name,
@@ -307,16 +312,10 @@ class AnalysisPipeline {
     return phase.promise;
   }
 
-  /**
-   * V02: Get count of completed phases
-   */
   getCompletedCount() {
     return this.phases.filter(p => p.status === 'completed').length;
   }
 
-  /**
-   * V02: Get partial results (completed phases only)
-   */
   getPartialResults() {
     const results = {};
     this.phases.forEach(phase => {
@@ -327,9 +326,6 @@ class AnalysisPipeline {
     return results;
   }
 
-  /**
-   * V02: Retry a failed phase
-   */
   async retryPhase(key) {
     const phase = this.phases.find(p => p.key === key);
     if (!phase) {
@@ -340,49 +336,51 @@ class AnalysisPipeline {
       throw new Error(`Phase ${key} is not in error state`);
     }
     
-    // Create new abort controller if needed (for retries after pipeline finished)
     if (!this.abortController) {
       this.abortController = new AbortController();
     }
     
-    // Reset phase state
     phase.status = 'pending';
     phase.error = null;
     delete phase.promise;
     
-    // Re-execute
     return this.executePhase(key);
   }
 
   /**
-   * Run company analysis
+   * Run company analysis - handles URL, file, or both
    */
   async runCompanyAnalysis() {
     const response = await CompanyAPI.analyze(
-      this.companyUrl,
+      { url: this.companyUrl, file: this.companyFile },
       this.abortController.signal
     );
     
-    const validation = Validators.validateCompany(response);
+    // Response now contains { full, short }
+    // Validate the full output for display
+    const validation = Validators.validateCompany(response.full || response);
     if (!validation.valid) {
       throw new Error(`Invalid company data: ${validation.error}`);
     }
     
-    this.techDescription = this.buildTechDescription(response);
+    // Store short description for other APIs
+    this.companyDescription = CompanyAPI.getShortDescription(response);
+    
+    console.log('[Pipeline] Company analysis complete, short description length:', this.companyDescription?.length);
     
     return response;
   }
 
   /**
-   * Run team analysis
+   * Run team analysis - now uses company description
    */
   async runTeamAnalysis() {
-    if (!this.companyUrl) {
-      throw new Error('Company URL not available');
+    if (!this.companyDescription) {
+      throw new Error('Company description not available');
     }
 
     const response = await TeamAPI.analyze(
-      this.companyUrl,
+      this.companyDescription,
       this.abortController.signal
     );
 
@@ -395,15 +393,15 @@ class AnalysisPipeline {
   }
 
   /**
-   * Run funding analysis
+   * Run funding analysis - uses short company description
    */
   async runFundingAnalysis() {
-    if (!this.techDescription) {
-      throw new Error('Tech description not available');
+    if (!this.companyDescription) {
+      throw new Error('Company description not available');
     }
 
     const response = await FundingAPI.analyze(
-      this.techDescription,
+      this.companyDescription,
       this.abortController.signal
     );
 
@@ -416,15 +414,15 @@ class AnalysisPipeline {
   }
 
   /**
-   * Run competitive analysis
+   * Run competitive analysis - uses short company description
    */
   async runCompetitiveAnalysis() {
-    if (!this.techDescription) {
-      throw new Error('Tech description not available');
+    if (!this.companyDescription) {
+      throw new Error('Company description not available');
     }
 
     const response = await CompetitiveAPI.analyze(
-      this.techDescription,
+      this.companyDescription,
       this.abortController.signal
     );
     
@@ -437,11 +435,11 @@ class AnalysisPipeline {
   }
 
   /**
-   * Run market analysis
+   * Run market analysis - uses company description + competitive output
    */
   async runMarketAnalysis() {
-    if (!this.techDescription) {
-      throw new Error('Tech description not available');
+    if (!this.companyDescription) {
+      throw new Error('Company description not available');
     }
 
     const competitiveData = this.phases.find(p => p.key === 'competitive')?.data;
@@ -450,7 +448,7 @@ class AnalysisPipeline {
     }
 
     const response = await MarketAPI.analyze(
-      this.techDescription,
+      this.companyDescription,
       competitiveData.analysisText || competitiveData,
       this.abortController.signal
     );
@@ -464,70 +462,19 @@ class AnalysisPipeline {
   }
 
   /**
-   * Run IP risk analysis
+   * Run IP risk analysis - uses short company description
    */
   async runIpRiskAnalysis() {
-    if (!this.techDescription) {
-      throw new Error('Tech description not available');
+    if (!this.companyDescription) {
+      throw new Error('Company description not available');
     }
 
     const response = await IPRiskAPI.analyze(
-      this.techDescription,
+      this.companyDescription,
       this.abortController.signal
     );
 
-    // V02: Add IP risk validation
-    // const validation = Validators.validateIpRisk(response);
-    // if (!validation.valid) {
-    //   throw new Error(`Invalid IP risk data: ${validation.error}`);
-    // }
-
     return response;
-  }
-
-  /**
-   * Build tech description from company data
-   */
-  buildTechDescription(company) {
-    const parts = [];
-    
-    if (company.company_overview) {
-      const o = company.company_overview;
-      if (o.name) parts.push(`Company: ${o.name}`);
-      if (o.mission_statement) parts.push(`Mission: ${o.mission_statement}`);
-      if (o.company_description) parts.push(o.company_description);
-    }
-    
-    if (company.technology) {
-      const t = company.technology;
-      if (t.core_technology) parts.push(`Core Technology: ${t.core_technology}`);
-      if (t.technical_approach) parts.push(`Technical Approach: ${t.technical_approach}`);
-      if (t.key_innovations && t.key_innovations.length > 0) {
-        parts.push(`Key Innovations: ${t.key_innovations.slice(0, 3).join('; ')}`);
-      }
-    }
-    
-    if (company.products_and_applications) {
-      const p = company.products_and_applications;
-      if (p.primary_application) parts.push(`Primary Application: ${p.primary_application}`);
-      if (p.target_industries && p.target_industries.length > 0) {
-        parts.push(`Target Industries: ${p.target_industries.join(', ')}`);
-      }
-    }
-    
-    if (company.market_context) {
-      const m = company.market_context;
-      if (m.problem_addressed) parts.push(`Problem Addressed: ${m.problem_addressed}`);
-      if (m.value_proposition) parts.push(`Value Proposition: ${m.value_proposition}`);
-    }
-    
-    const description = parts.join('\n\n');
-    
-    if (description.length < 200) {
-      parts.push('This company is developing innovative technology solutions for their target market.');
-    }
-    
-    return parts.join('\n\n');
   }
 
   /**
@@ -545,17 +492,8 @@ class AnalysisPipeline {
 
   /**
    * Get current progress
-   * Time calculation:
-   * - Company runs first: ~150s
-   * - Then parallel: Team(70s), Funding(60s), Competitive(160s), IP Risk(60s)
-   * - Market waits for Competitive, then runs: ~250s
-   * - Effective total: Company(150s) + max(parallel phases) + Market(250s if competitive succeeds)
-   * - Parallel max is Competitive(160s)
-   * - Total effective time: ~150 + 160 + 250 = 560s (~9-10 minutes)
    */
   getProgress() {
-    // Effective total considers parallelism:
-    // Company (sequential) + max parallel batch + market (sequential after competitive)
     const companyDuration = this.phases.find(p => p.key === 'company')?.duration || 150;
     const parallelPhases = ['team', 'funding', 'competitive', 'iprisk'];
     const maxParallelDuration = Math.max(
@@ -563,20 +501,17 @@ class AnalysisPipeline {
     );
     const marketDuration = this.phases.find(p => p.key === 'market')?.duration || 250;
     
-    // Total effective time considering parallel execution
     const effectiveTotalDuration = companyDuration + maxParallelDuration + marketDuration;
     
     const now = Date.now();
     const elapsed = this.startTime ? (now - this.startTime) / 1000 : 0;
 
-    // Calculate progress based on completed phases
     const companyPhase = this.phases.find(p => p.key === 'company');
     const marketPhase = this.phases.find(p => p.key === 'market');
     const competitivePhase = this.phases.find(p => p.key === 'competitive');
     
     let progressContribution = 0;
     
-    // Company phase contribution
     if (companyPhase.status === 'completed') {
       progressContribution += companyDuration;
     } else if (companyPhase.status === 'active' && companyPhase.startTime) {
@@ -584,7 +519,6 @@ class AnalysisPipeline {
       progressContribution += Math.min(phaseElapsed, companyDuration);
     }
     
-    // Parallel phases - count progress for the slowest one (competitive)
     if (companyPhase.status === 'completed') {
       const parallelCompleted = parallelPhases.every(k => {
         const p = this.phases.find(ph => ph.key === k);
@@ -599,14 +533,12 @@ class AnalysisPipeline {
       }
     }
     
-    // Market phase contribution
     if (marketPhase.status === 'completed') {
       progressContribution += marketDuration;
     } else if (marketPhase.status === 'active' && marketPhase.startTime) {
       const phaseElapsed = (now - marketPhase.startTime) / 1000;
       progressContribution += Math.min(phaseElapsed, marketDuration);
     } else if (marketPhase.status === 'error') {
-      // Count as complete if it errored (won't run)
       progressContribution += marketDuration;
     }
 
@@ -635,38 +567,32 @@ class AnalysisPipeline {
 
   /**
    * Get results
-  */
+   */
   getResults() {
+    const companyData = this.phases.find(p => p.key === 'company')?.data;
+    
     return {
-      company: this.phases.find(p => p.key === 'company')?.data || null,
+      // Return full company output for display
+      company: companyData?.full || companyData || null,
       team: this.phases.find(p => p.key === 'team')?.data || null,
       funding: this.phases.find(p => p.key === 'funding')?.data || null,
       competitive: this.phases.find(p => p.key === 'competitive')?.data || null,
       market: this.phases.find(p => p.key === 'market')?.data || null,
       iprisk: this.phases.find(p => p.key === 'iprisk')?.data || null,
-      techDescription: this.techDescription,
+      companyDescription: this.companyDescription,
       duration: (Date.now() - this.startTime) / 1000
     };
   }
 
-  /**
-   * Check if all phases completed
-   */
   isComplete() {
     return this.phases.every(phase => phase.status === 'completed');
   }
 
-  /**
-   * Get phase status
-   */
   getPhaseStatus(key) {
     const phase = this.phases.find(p => p.key === key);
     return phase ? phase.status : null;
   }
 
-  /**
-   * Reset pipeline
-   */
   reset() {
     if (this.abortController) {
       this.abortController.abort();
@@ -675,7 +601,8 @@ class AnalysisPipeline {
     this.startTime = null;
     this.abortController = null;
     this.companyUrl = null;
-    this.techDescription = null;
+    this.companyFile = null;
+    this.companyDescription = null;
     this.isRunning = false;
     this.activePhases.clear();
     

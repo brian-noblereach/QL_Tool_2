@@ -92,6 +92,113 @@ class App {
     if (cancelBtn) {
       cancelBtn.addEventListener('click', () => this.cancelAnalysis());
     }
+    
+    // File upload handling
+    this.setupFileUploadListeners();
+  }
+  
+  setupFileUploadListeners() {
+    const fileInput = document.getElementById('company-file');
+    const uploadZone = document.getElementById('file-upload-zone');
+    const fileInfo = document.getElementById('file-selected-info');
+    const fileName = document.getElementById('file-name');
+    const removeBtn = document.getElementById('file-remove-btn');
+    
+    if (!fileInput || !uploadZone) return;
+    
+    // Store selected file reference
+    this.selectedFile = null;
+    
+    // File selection via input
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        this.handleFileSelection(file);
+      }
+    });
+    
+    // Drag and drop events
+    uploadZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      uploadZone.classList.add('drag-over');
+    });
+    
+    uploadZone.addEventListener('dragleave', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      uploadZone.classList.remove('drag-over');
+    });
+    
+    uploadZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      uploadZone.classList.remove('drag-over');
+      
+      const files = e.dataTransfer.files;
+      if (files.length > 0) {
+        this.handleFileSelection(files[0]);
+      }
+    });
+    
+    // Remove file button
+    if (removeBtn) {
+      removeBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.clearFileSelection();
+      });
+    }
+  }
+  
+  handleFileSelection(file) {
+    const uploadZone = document.getElementById('file-upload-zone');
+    const fileInfo = document.getElementById('file-selected-info');
+    const fileNameEl = document.getElementById('file-name');
+    const fileInput = document.getElementById('company-file');
+    
+    // Validate file type
+    const validTypes = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    ];
+    const validExtensions = ['.pdf', '.doc', '.docx'];
+    
+    const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
+    const isValidType = validTypes.includes(file.type) || validExtensions.includes(fileExtension);
+    
+    if (!isValidType) {
+      uploadZone.classList.add('error');
+      this.toastManager?.error('Please upload a PDF or Word document');
+      setTimeout(() => uploadZone.classList.remove('error'), 3000);
+      return;
+    }
+    
+    // Store file reference
+    this.selectedFile = file;
+    
+    // Update UI
+    uploadZone.classList.add('has-file');
+    uploadZone.classList.remove('error');
+    fileInfo.classList.remove('hidden');
+    fileNameEl.textContent = file.name;
+    
+    console.log('[App] File selected:', file.name, file.type, file.size);
+  }
+  
+  clearFileSelection() {
+    const uploadZone = document.getElementById('file-upload-zone');
+    const fileInfo = document.getElementById('file-selected-info');
+    const fileInput = document.getElementById('company-file');
+    
+    this.selectedFile = null;
+    
+    if (fileInput) fileInput.value = '';
+    if (uploadZone) uploadZone.classList.remove('has-file', 'error');
+    if (fileInfo) fileInfo.classList.add('hidden');
+    
+    console.log('[App] File selection cleared');
   }
 
   setupPipelineCallbacks() {
@@ -232,20 +339,30 @@ class App {
     
     const url = urlInput.value.trim();
     const scaName = scaInput?.value.trim() || '';
+    const file = this.selectedFile;
     
-    if (!url) {
-      this.showValidationError(urlInput, 'Please enter a company website URL');
+    // Validate: need either URL or file
+    const hasUrl = url.length > 0;
+    const hasFile = file instanceof File;
+    
+    if (!hasUrl && !hasFile) {
+      this.showValidationError(urlInput, 'Please enter a company website URL or upload a document');
       return;
     }
     
-    const validation = Validators.validateUrl(url);
-    if (!validation.valid) {
-      this.showValidationError(urlInput, validation.error);
-      return;
+    // Validate URL if provided
+    let validatedUrl = null;
+    if (hasUrl) {
+      const validation = Validators.validateUrl(url);
+      if (!validation.valid) {
+        this.showValidationError(urlInput, validation.error);
+        return;
+      }
+      validatedUrl = validation.url;
     }
     
     // Save input to state
-    this.stateManager.setCompanyInput(validation.url, scaName);
+    this.stateManager.setCompanyInput(validatedUrl || 'Document Upload', scaName);
     
     // Request notification permission
     await this.requestNotificationPermission();
@@ -253,7 +370,17 @@ class App {
     try {
       // Show progress section
       this.showSection('progress');
-      document.getElementById('progress-company-name').textContent = 'Analyzing: ' + validation.url;
+      
+      // Update progress message based on input type
+      let progressMessage = 'Analyzing: ';
+      if (hasUrl && hasFile) {
+        progressMessage += validatedUrl + ' + ' + file.name;
+      } else if (hasFile) {
+        progressMessage += file.name;
+      } else {
+        progressMessage += validatedUrl;
+      }
+      document.getElementById('progress-company-name').textContent = progressMessage;
       
       // Reset tab states
       this.tabManager.reset();
@@ -261,8 +388,8 @@ class App {
       // Start progress tracking
       this.progressView.start(this.pipeline);
       
-      // Run analysis
-      await this.pipeline.start(validation.url);
+      // Run analysis with URL and/or file
+      await this.pipeline.start({ url: validatedUrl, file: file });
       
     } catch (error) {
       console.error('Analysis failed:', error);
@@ -497,6 +624,9 @@ class App {
     const scaInput = document.getElementById('sca-name');
     if (urlInput) urlInput.value = '';
     if (scaInput) scaInput.value = '';
+    
+    // Clear file selection
+    this.clearFileSelection();
     
     // Disable export
     const exportBtn = document.getElementById('export-btn');

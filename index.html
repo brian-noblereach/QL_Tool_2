@@ -71,10 +71,55 @@
                 id="company-url" 
                 name="company-url" 
                 placeholder="https://example.com"
-                required
                 autocomplete="url"
               >
               <span class="input-hint">Enter the main website URL for the company you want to assess</span>
+            </div>
+          </div>
+          
+          <!-- File Upload Section -->
+          <div class="form-row">
+            <div class="form-group flex-1">
+              <label for="company-file">Supporting Document <span class="label-optional">(optional)</span></label>
+              <div class="file-upload-zone" id="file-upload-zone">
+                <input 
+                  type="file" 
+                  id="company-file" 
+                  name="company-file" 
+                  accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  class="file-input-hidden"
+                >
+                <div class="file-upload-content">
+                  <div class="file-upload-icon">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                      <polyline points="14 2 14 8 20 8"/>
+                      <line x1="12" y1="18" x2="12" y2="12"/>
+                      <line x1="9" y1="15" x2="15" y2="15"/>
+                    </svg>
+                  </div>
+                  <div class="file-upload-text">
+                    <span class="file-upload-primary">Drop a file here or click to browse</span>
+                    <span class="file-upload-secondary">PDF or Word documents accepted</span>
+                  </div>
+                </div>
+                <div class="file-selected-info hidden" id="file-selected-info">
+                  <div class="file-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                      <polyline points="14 2 14 8 20 8"/>
+                    </svg>
+                  </div>
+                  <span class="file-name" id="file-name">document.pdf</span>
+                  <button type="button" class="file-remove-btn" id="file-remove-btn" title="Remove file">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <line x1="18" y1="6" x2="6" y2="18"/>
+                      <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <span class="input-hint">Upload a pitch deck, executive summary, or company overview to enhance the analysis</span>
             </div>
           </div>
           
@@ -587,6 +632,7 @@
   <script src="js/utils/export.js"></script>
   <script src="js/utils/sharepoint.js"></script>
   <script src="js/utils/smartsheet.js"></script>
+  <script src="js/utils/confidence.js"></script>
   
   <!-- Config -->
   <script src="js/config/sharepoint-config.js"></script>

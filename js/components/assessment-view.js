@@ -425,6 +425,7 @@ class AssessmentView {
     const gaps = formatted.gaps || scoringRaw.key_gaps || [];
     const sources = formatted.sources || teamRaw.trusted_sources || [];
     const confidence = formatted.confidence || teamRaw.data_confidence;
+    const confidenceJustification = formatted.confidenceJustification || teamRaw.confidence_justification || '';
     const justification = formatted.justification || scoringRaw.score_justification || '';
     const rubricMatch = formatted.rubric || scoringRaw.rubric_match_explanation || '';
     
@@ -446,7 +447,7 @@ class AssessmentView {
           </div>
           <div class="metric-card">
             <span class="metric-label">Confidence</span>
-            <span class="metric-value">${confidence ? Math.round(confidence * 100) + '%' : '-'}</span>
+            <span class="metric-value">${confidence || '-'}</span>
           </div>
         </div>
         
@@ -555,7 +556,8 @@ class AssessmentView {
         </div>
         <div class="evidence-section">
           <h4>Confidence Note</h4>
-          <p>${this.escape(teamRaw?.confidence_justification || 'No additional confidence information.')}</p>
+          <p><strong>${confidence || '-'}</strong> confidence level.</p>
+          <p>${this.escape(confidenceJustification || 'No additional confidence information.')}</p>
         </div>
       </div>
     `;
@@ -608,13 +610,10 @@ class AssessmentView {
     // formatted uses: fundingRounds (array with url), peerDeals (array with url)
     const fundingRounds = formatted.fundingRounds || ventureFunding.funding_rounds || [];
     const marketDeals = formatted.peerDeals || analysisRaw?.market_deals || [];
-    const confidence = formatted.confidence;
-    const confidenceRaw = analysisRaw?.data_confidence;
+    const confidence = formatted.confidence || analysisRaw?.data_confidence;
+    const confidenceJustification = formatted.confidenceJustification || analysisRaw?.confidence_justification || '';
     const justification = assessmentRaw?.score_justification || {};
     const evidenceSummary = formatted.summary || justification?.evidence_summary || '';
-    
-    const confDisplay = confidence ? Math.round(confidence * 100) + '%' : 
-                        (confidenceRaw ? Math.round(confidenceRaw * 100) + '%' : '-');
     
     // SUMMARY VIEW
     const summaryHTML = `
@@ -634,7 +633,7 @@ class AssessmentView {
           </div>
           <div class="metric-card">
             <span class="metric-label">Confidence</span>
-            <span class="metric-value">${confDisplay}</span>
+            <span class="metric-value">${confidence || '-'}</span>
           </div>
         </div>
         
@@ -758,7 +757,8 @@ class AssessmentView {
         </div>
         <div class="evidence-section">
           <h4>Confidence Note</h4>
-          <p>${formatted.confidenceLabel || confDisplay} confidence in funding data.</p>
+          <p><strong>${confidence || '-'}</strong> confidence level.</p>
+          <p>${this.escape(confidenceJustification || 'No additional confidence information.')}</p>
         </div>
       </div>
     `;
@@ -813,6 +813,8 @@ class AssessmentView {
     const keyRisks = assessmentRaw?.key_risk_factors || formatted.keyRisks || [];
     const opportunities = assessmentRaw?.differentiation_opportunities || formatted.opportunities || analysis?.market_gaps || [];
     const justification = formatted.justification || assessmentRaw?.score_justification || '';
+    const confidence = formatted.confidence || analysisRaw?.data_confidence;
+    const confidenceJustification = formatted.confidenceJustification || analysisRaw?.confidence_justification || '';
     const sources = dataQuality?.sources_used || [];
     
     // SUMMARY VIEW
@@ -833,7 +835,7 @@ class AssessmentView {
           </div>
           <div class="metric-card">
             <span class="metric-label">Confidence</span>
-            <span class="metric-value">${dataQuality.overall_confidence ? Math.round(dataQuality.overall_confidence * 100) + '%' : '-'}</span>
+            <span class="metric-value">${confidence || '-'}</span>
           </div>
         </div>
         
@@ -923,7 +925,8 @@ class AssessmentView {
         </div>
         <div class="evidence-section">
           <h4>Confidence Note</h4>
-          <p>${this.escape(dataQuality.confidence_justification || 'No additional confidence information.')}</p>
+          <p><strong>${confidence || '-'}</strong> confidence level.</p>
+          <p>${this.escape(confidenceJustification || 'No additional confidence information.')}</p>
         </div>
       </div>
     `;
@@ -978,7 +981,8 @@ class AssessmentView {
     const markets = formatted.markets || analysisRaw?.markets || [];
     
     const marketAnalysis = analysisRaw?.market_analysis || {};
-    const confidence = formatted.confidence || analysisRaw?.overall_confidence || scoringRaw?.confidence;
+    const confidence = formatted.confidence || scoringRaw?.data_quality?.overall_confidence;
+    const confidenceJustification = formatted.confidenceJustification || scoringRaw?.data_quality?.confidence_justification || '';
     
     // Justification
     const justificationSummary = formatted.justification || scoringRaw?.justification?.summary || '';
@@ -1019,7 +1023,7 @@ class AssessmentView {
           </div>
           <div class="metric-card">
             <span class="metric-label">Confidence</span>
-            <span class="metric-value">${confidence ? Math.round(confidence * 100) + '%' : '-'}</span>
+            <span class="metric-value">${confidence || '-'}</span>
           </div>
         </div>
         
@@ -1129,7 +1133,8 @@ class AssessmentView {
         </div>
         <div class="evidence-section">
           <h4>Confidence Note</h4>
-          <p>${confidence ? Math.round(confidence * 100) + '%' : 'Unknown'} confidence in market data.</p>
+          <p><strong>${confidence || '-'}</strong> confidence level.</p>
+          <p>${this.escape(confidenceJustification || 'No additional confidence information.')}</p>
         </div>
         <div class="evidence-section">
           <h4>Data Quality</h4>
@@ -1192,6 +1197,7 @@ class AssessmentView {
     const topOwners = formatted.topOwners || summary.topPatentOwners || [];
     const relevantPatents = formatted.relevantPatents || summary.top5RelevantPatents || [];
     const confidence = formatted.dataConfidence || ipData?.dataConfidence;
+    const confidenceJustification = formatted.dataConfidenceJustification || ipData?.confidenceJustification || '';
     
     // SUMMARY VIEW
     const summaryHTML = `
@@ -1211,7 +1217,7 @@ class AssessmentView {
           </div>
           <div class="metric-card">
             <span class="metric-label">Confidence</span>
-            <span class="metric-value">${confidence ? Math.round(confidence * 100) + '%' : '-'}</span>
+            <span class="metric-value">${confidence || '-'}</span>
           </div>
         </div>
         
@@ -1344,6 +1350,11 @@ class AssessmentView {
         <div class="evidence-section">
           <h4>Rubric Alignment</h4>
           <div class="rubric-explanation">${this.formatRationale(data?.rubricDescription || '')}</div>
+        </div>
+        <div class="evidence-section">
+          <h4>Confidence Note</h4>
+          <p><strong>${confidence || '-'}</strong> confidence level.</p>
+          <p>${this.escape(confidenceJustification || 'No additional confidence information.')}</p>
         </div>
       </div>
     `;
