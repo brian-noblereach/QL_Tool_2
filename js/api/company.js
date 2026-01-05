@@ -88,12 +88,18 @@ const CompanyAPI = {
     // Validate response has required outputs
     const outputs = data?.outputs || {};
     
+    console.log('[CompanyAPI] Raw outputs keys:', Object.keys(outputs));
+    console.log('[CompanyAPI] out-6 type:', typeof outputs['out-6']);
+    console.log('[CompanyAPI] out-6 keys:', outputs['out-6'] ? Object.keys(outputs['out-6']) : 'null');
+    
     if (!outputs['out-6'] && !outputs['out-7']) {
       throw new Error('Company API did not return expected outputs (out-6 or out-7)');
     }
 
     // Parse full output (out-6) - this IS JSON
     const fullOutput = this.parseOutput(outputs['out-6'], 'full company data');
+    
+    console.log('[CompanyAPI] Parsed fullOutput keys:', fullOutput ? Object.keys(fullOutput) : 'null');
     
     // Get short output (out-7) - treat as TEXT, not JSON
     const shortOutput = this.extractTextOutput(outputs['out-7']);
@@ -108,8 +114,10 @@ const CompanyAPI = {
     // Short output is kept as text string for passing to other APIs
     const short = shortOutput || '';
 
-    console.log('[CompanyAPI] Processed outputs:', {
+    console.log('[CompanyAPI] Final processed outputs:', {
       fullKeys: Object.keys(full),
+      hasCompanyOverview: !!full.company_overview,
+      companyName: full.company_overview?.name,
       shortLength: short.length
     });
 
@@ -143,17 +151,28 @@ const CompanyAPI = {
 
   /**
    * Parse output that may be string or object (for full output only)
+   * Handles multiple wrapper structures from Stack AI
    */
   parseOutput(rawOutput, label = 'output') {
     if (!rawOutput) return null;
 
-    // Handle object with text property
+    console.log(`[CompanyAPI] parseOutput ${label}: type=${typeof rawOutput}`);
+
+    // Handle object with text property (Stack AI wrapper)
     if (typeof rawOutput === 'object' && rawOutput.text) {
+      console.log(`[CompanyAPI] parseOutput ${label}: found text property, recursing`);
       return this.parseOutput(rawOutput.text, label);
     }
 
-    // Already an object
+    // Already an object with expected schema properties
     if (typeof rawOutput === 'object') {
+      // Check if it has the expected schema structure
+      if (rawOutput.company_overview || rawOutput.technology || rawOutput.company_profile) {
+        console.log(`[CompanyAPI] parseOutput ${label}: already parsed object with schema keys`);
+        return rawOutput;
+      }
+      // Otherwise might be wrapped differently
+      console.log(`[CompanyAPI] parseOutput ${label}: object without expected keys:`, Object.keys(rawOutput));
       return rawOutput;
     }
 
@@ -173,9 +192,12 @@ const CompanyAPI = {
           cleaned = cleaned.slice(0, -3);
         }
         
-        return JSON.parse(cleaned.trim());
+        const parsed = JSON.parse(cleaned.trim());
+        console.log(`[CompanyAPI] parseOutput ${label}: parsed JSON string, keys:`, Object.keys(parsed));
+        return parsed;
       } catch (error) {
         console.error(`[CompanyAPI] Failed to parse ${label}:`, error);
+        console.error(`[CompanyAPI] Raw string (first 500 chars):`, rawOutput.slice(0, 500));
         return null;
       }
     }
