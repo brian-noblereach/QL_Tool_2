@@ -3,8 +3,8 @@
 // Uses GET requests with URL parameters to avoid CORS preflight issues
 
 const SmartsheetIntegration = {
-  // Google Apps Script Web App URL
-  proxyUrl: 'https://script.google.com/macros/s/AKfycbzt7wElvzQv0CNs-icg7QWpxjf4E5FGqWa6KpCY4zSa_thccGNWhw-THLTpnn8GJa2W/exec',
+  // Google Apps Script Web App URL (same as StackProxy)
+  proxyUrl: 'https://script.google.com/macros/s/AKfycbzt7wE1vzQv0CNs-icg7QWpxjf4E5F_HLTpnn8GJa2W/exec',
   
   // Track submission state
   state: {

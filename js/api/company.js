@@ -1,6 +1,8 @@
 // js/api/company.js - Company analysis API (Proxied)
 // Supports three input modes: URL only, file only, or both
 // Returns both full output (for display) and short output (for other APIs)
+// Full output follows the venture-extraction-schema JSON schema
+// Short output is treated as TEXT (not JSON) for passing to other APIs
 
 const CompanyAPI = {
   config: {
@@ -13,7 +15,7 @@ const CompanyAPI = {
    * @param {Object} options - Input options
    * @param {string} options.url - Company website URL (optional)
    * @param {File} options.file - Uploaded document (optional)
-   * @returns {Promise<Object>} - { full: {...}, short: {...} }
+   * @returns {Promise<Object>} - { full: {...}, short: "..." }
    */
   async analyze({ url, file } = {}, abortSignal = null) {
     // Validate inputs - need at least one
@@ -79,8 +81,8 @@ const CompanyAPI = {
 
   /**
    * Process API response - extract both full and short outputs
-   * out-6 = full output (for display)
-   * out-7 = short output (for other APIs)
+   * out-6 = full output (JSON for display)
+   * out-7 = short output (TEXT for other APIs - do NOT parse as JSON)
    */
   processResponse(data) {
     // Validate response has required outputs
@@ -90,32 +92,57 @@ const CompanyAPI = {
       throw new Error('Company API did not return expected outputs (out-6 or out-7)');
     }
 
-    // Parse full output (out-6)
+    // Parse full output (out-6) - this IS JSON
     const fullOutput = this.parseOutput(outputs['out-6'], 'full company data');
     
-    // Parse short output (out-7)
-    const shortOutput = this.parseOutput(outputs['out-7'], 'short company data');
+    // Get short output (out-7) - treat as TEXT, not JSON
+    const shortOutput = this.extractTextOutput(outputs['out-7']);
 
     if (!fullOutput && !shortOutput) {
       throw new Error('Failed to parse company data');
     }
 
-    // Ensure required structure in full output
+    // Ensure required structure in full output (follows venture-extraction-schema)
     const full = this.ensureStructure(fullOutput || {});
     
-    // Short output is passed as-is to other APIs (it's already formatted correctly)
-    const short = shortOutput || this.createShortFromFull(full);
+    // Short output is kept as text string for passing to other APIs
+    const short = shortOutput || '';
 
     console.log('[CompanyAPI] Processed outputs:', {
       fullKeys: Object.keys(full),
-      shortKeys: Object.keys(short)
+      shortLength: short.length
     });
 
     return { full, short };
   },
 
   /**
-   * Parse output that may be string or object
+   * Extract text output - keeps as string, does NOT parse as JSON
+   * The short output should be passed as text to subsequent APIs
+   */
+  extractTextOutput(rawOutput) {
+    if (!rawOutput) return '';
+
+    // Handle object with text property
+    if (typeof rawOutput === 'object' && rawOutput.text) {
+      return rawOutput.text;
+    }
+
+    // Already a string - return as-is (don't parse)
+    if (typeof rawOutput === 'string') {
+      return rawOutput;
+    }
+
+    // If it's an object without text property, stringify it
+    if (typeof rawOutput === 'object') {
+      return JSON.stringify(rawOutput);
+    }
+
+    return String(rawOutput);
+  },
+
+  /**
+   * Parse output that may be string or object (for full output only)
    */
   parseOutput(rawOutput, label = 'output') {
     if (!rawOutput) return null;
@@ -158,131 +185,304 @@ const CompanyAPI = {
 
   /**
    * Ensure full output has required structure for display
-   * Normalizes different API response formats to a consistent structure
-   * Handles multiple schema variations from Stack AI
+   * Normalizes to match venture-extraction-schema
    */
   ensureStructure(data) {
-    // Handle case where data is wrapped in company_profile
+    // The new schema has these top-level sections:
+    // company_overview, technology, products_and_applications, team,
+    // funding_and_investors, traction_and_metrics, recent_activity,
+    // market_context, data_quality_assessment
+
+    // Handle legacy company_profile wrapper
     if (data.company_profile && !data.company_overview) {
       const profile = data.company_profile;
       
-      // Schema variant 1: company_profile.basic_information.company_name
-      // Schema variant 2: company_profile.name (direct)
+      // Map to new schema structure
       const basicInfo = profile.basic_information || {};
       const companyName = basicInfo.company_name || profile.name || '';
       const website = basicInfo.website || profile.website || '';
       const headquarters = basicInfo.headquarters || 
-                          (typeof profile.headquarters === 'object' ? profile.headquarters?.address : profile.headquarters) || '';
-      const founded = basicInfo.founded || profile.founded_year || '';
-      const industry = basicInfo.industry || '';
+                          (typeof profile.headquarters === 'object' ? profile.headquarters?.address : profile.headquarters) || null;
+      const founded = basicInfo.founded || profile.founded_year || null;
       
-      // Get technology info - may be in profile.core_technology or data.core_technology
+      // Get technology info
       const coreTech = profile.core_technology || data.core_technology || {};
       
+      // Build company_overview following schema
       data.company_overview = {
         name: companyName,
-        company_name: companyName,
         website: website,
+        founded_year: typeof founded === 'number' ? founded : (parseInt(founded) || null),
         headquarters: headquarters,
-        founded_year: founded,
-        industry: industry,
-        business_model: basicInfo.business_model || '',
-        company_stage: profile.company_stage?.stage || data.company_stage?.stage || '',
-        stage_description: profile.company_stage?.description || profile.company_stage?.stage_description || '',
-        stage_evidence: profile.company_stage?.evidence || '',
+        company_stage: profile.company_stage?.stage || data.company_stage?.stage || null,
+        employee_count: profile.employee_count || basicInfo.employee_count || null,
+        mission_statement: profile.mission_statement || coreTech.problem_solved || '',
         company_description: coreTech.technology_description || profile.operating_status || ''
       };
       
+      // Build technology section following schema
       data.technology = {
-        core_technology: coreTech.technology_name || coreTech.primary_innovation || coreTech.technology_category || '',
-        technology_description: coreTech.technology_description || '',
-        problem_solved: coreTech.problem_solved || '',
-        key_components: coreTech.key_technical_components || coreTech.key_technical_features || {},
-        specifications: coreTech.performance_specifications || data.product_specifications || {},
-        differentiation: coreTech.differentiation || '',
-        applications: coreTech.technology_applications || []
+        core_technology: coreTech.technology_description || coreTech.technology_name || '',
+        technology_category: coreTech.technology_category || basicInfo.industry || '',
+        technical_approach: coreTech.technical_approach || '',
+        key_innovations: coreTech.key_technical_features?.map(f => 
+          typeof f === 'object' ? `${f.feature}: ${f.description}` : f
+        ) || [],
+        intellectual_property: {
+          patents_filed: null,
+          patents_granted: null,
+          patent_descriptions: [],
+          trade_secrets_mentioned: false
+        }
       };
       
-      // Handle technology_applications or market_opportunity
+      // Build products_and_applications following schema
       const techApps = profile.technology_applications || data.market_opportunity || {};
       data.products_and_applications = {
-        primary_markets: techApps.primary_markets || techApps.target_markets || [],
-        use_cases: techApps.use_cases || [],
-        market_opportunity: techApps.market_opportunity || techApps.market_size_context || ''
+        primary_application: techApps.primary_markets?.[0] || '',
+        products: (data.product_specifications ? [{
+          name: data.product_specifications.flagship_product || 'Primary Product',
+          description: data.product_specifications.data_rate?.description || '',
+          status: 'commercial',
+          target_market: techApps.target_markets?.[0]?.market || '',
+          launch_date: null
+        }] : []),
+        use_cases: coreTech.technology_applications || techApps.use_cases || [],
+        target_industries: techApps.target_markets?.map(m => typeof m === 'object' ? m.market : m) || 
+                          techApps.primary_markets || []
       };
       
-      // Handle competitive_landscape
+      // Build team section following schema
+      const teamData = profile.team_and_leadership || data.founders_and_leadership || {};
+      data.team = {
+        founders: (teamData.founders || teamData || []).filter(f => f.name).map(f => ({
+          name: f.name || '',
+          role: f.title || f.role || '',
+          background: f.background || null,
+          linkedin: f.linkedin || null
+        })),
+        key_executives: (teamData.key_team_members || teamData.key_executives || []).map(e => ({
+          name: e.name || '',
+          role: e.role || e.title || '',
+          background: e.background || e.expertise || null
+        })),
+        advisors: (teamData.advisors || []).map(a => ({
+          name: a.name || '',
+          expertise: a.expertise || null
+        }))
+      };
+      
+      // Build funding_and_investors following schema
+      const fundingData = profile.funding_and_investors || data.funding_history || {};
+      data.funding_and_investors = {
+        total_funding: this.parseAmount(fundingData.total_funding_disclosed || fundingData.total_funding),
+        funding_rounds: (fundingData.funding_rounds || []).map(r => ({
+          round_type: r.type || r.round_type || '',
+          amount: r.amount_usd || r.amount || null,
+          date: r.date || null,
+          lead_investors: r.lead_investor ? [r.lead_investor] : (r.lead_investors || []),
+          other_investors: r.other_investors || [],
+          valuation: r.valuation || null
+        })),
+        government_grants: (fundingData.sbir_funding?.notable_projects || fundingData.government_grants || []).map(g => ({
+          source: g.sponsor || g.source || 'Government',
+          amount: g.award_amount_usd || g.amount || null,
+          date: g.date || null,
+          purpose: g.description || g.purpose || null
+        }))
+      };
+      
+      // Build traction_and_metrics following schema
+      const recentData = profile.recent_activities_and_milestones || data.recent_activities_and_milestones || {};
+      data.traction_and_metrics = {
+        customers: {
+          notable_customers: [],
+          customer_count: null,
+          customer_type: null
+        },
+        revenue: null,
+        growth_metrics: null,
+        partnerships: (recentData.partnerships_and_collaborations || []).map(p => ({
+          partner_name: p.partner || '',
+          partnership_type: p.type || '',
+          announcement_date: p.date || null
+        })),
+        achievements: recentData.recognition_and_awards?.map(a => 
+          typeof a === 'object' ? a.award : a
+        ) || recentData.market_recognition || []
+      };
+      
+      // Build recent_activity following schema
+      data.recent_activity = {
+        last_12_months: (recentData.recent_news_and_announcements || recentData.technology_milestones || []).map(n => ({
+          date: n.date || n.source || '',
+          activity_type: 'news',
+          description: n.announcement || n.milestone || n.description || '',
+          source_url: n.url || null
+        })),
+        upcoming_milestones: []
+      };
+      
+      // Build market_context following schema
       const compLandscape = profile.competitive_landscape || data.competitive_landscape || {};
       data.market_context = {
-        market_position: compLandscape.market_position || '',
-        competitors: compLandscape.key_competitors || compLandscape.direct_competitors || [],
-        competitive_advantages: compLandscape.competitive_advantages || compLandscape.oceancomm_differentiation || [],
-        market_trends: compLandscape.market_trends || ''
+        industry: basicInfo.industry || compLandscape.market_position || '',
+        sub_sector: null,
+        problem_addressed: coreTech.problem_solved || '',
+        value_proposition: coreTech.differentiation || compLandscape.oceancomm_differentiation?.[0] || '',
+        business_model: basicInfo.business_model || data.business_model_and_revenue?.revenue_model || null
       };
       
-      data.funding = profile.funding_and_investors || data.funding_history || {};
-      data.team = profile.team_and_leadership || data.founders_and_leadership || {};
-      data.recent_activities = profile.recent_activities_and_milestones || data.recent_activities_and_milestones || {};
-      data.intellectual_property = profile.intellectual_property || data.technology_validation?.patents_and_ip || {};
-      data.data_quality = profile.data_quality_and_gaps || data.data_quality || {};
+      // Build data_quality_assessment following schema
+      const qualityData = profile.data_quality_and_gaps || data.data_quality || {};
+      data.data_quality_assessment = {
+        extraction_date: new Date().toISOString().split('T')[0],
+        primary_sources: qualityData.sources_used || data.sources?.primary_sources?.map(s => s.source) || [],
+        information_completeness: qualityData.information_completeness || 'medium',
+        missing_critical_information: qualityData.information_gaps || qualityData.critical_gaps || [],
+        data_freshness: qualityData.data_recency ? 'recent' : 'mixed',
+        confidence_notes: qualityData.source_reliability || qualityData.information_verification || ''
+      };
     }
-    
-    // Also handle case where core_technology is at root level (schema variant 2)
+
+    // Also handle case where core_technology is at root level
     if (data.core_technology && !data.technology) {
       const coreTech = data.core_technology;
       data.technology = {
-        core_technology: coreTech.technology_name || coreTech.primary_innovation || coreTech.technology_category || '',
-        technology_description: coreTech.technology_description || '',
-        problem_solved: coreTech.problem_solved || '',
-        key_components: coreTech.key_technical_components || coreTech.key_technical_features || {},
-        specifications: coreTech.performance_specifications || data.product_specifications || {},
-        differentiation: coreTech.differentiation || '',
-        applications: coreTech.technology_applications || []
+        core_technology: coreTech.technology_description || coreTech.technology_name || '',
+        technology_category: coreTech.technology_category || '',
+        technical_approach: coreTech.technical_approach || '',
+        key_innovations: coreTech.key_technical_features?.map(f => 
+          typeof f === 'object' ? `${f.feature}: ${f.description}` : f
+        ) || [],
+        intellectual_property: {
+          patents_filed: null,
+          patents_granted: null,
+          patent_descriptions: [],
+          trade_secrets_mentioned: false
+        }
       };
     }
     
-    // Ensure required sections exist (even if empty)
-    if (!data.company_overview) {
-      data.company_overview = {};
-    }
-    if (!data.technology) {
-      data.technology = {};
-    }
-    if (!data.products_and_applications) {
-      data.products_and_applications = {};
-    }
-    if (!data.market_context) {
-      data.market_context = {};
+    // Ensure all required top-level sections exist (per schema)
+    const requiredSections = [
+      'company_overview',
+      'technology', 
+      'products_and_applications',
+      'team',
+      'funding_and_investors',
+      'traction_and_metrics',
+      'recent_activity',
+      'market_context',
+      'data_quality_assessment'
+    ];
+    
+    for (const section of requiredSections) {
+      if (!data[section]) {
+        data[section] = this.getDefaultSection(section);
+      }
     }
     
     return data;
   },
 
   /**
-   * Create a short version from full output if short output is missing
-   * This is a fallback - normally the API provides both
+   * Get default empty section following schema
    */
-  createShortFromFull(full) {
-    const overview = full.company_overview || {};
-    const tech = full.technology || {};
-    const market = full.market_context || {};
-    
-    return {
-      company_name: overview.name || overview.company_name || '',
-      website: overview.website || '',
-      headquarters: overview.headquarters || overview.location || '',
-      founded: overview.founded_year || overview.founded || '',
-      company_type: overview.company_type || 'Privately Held',
-      industry: overview.industry || market.industry || '',
-      employee_count: overview.employee_count || '',
-      status: overview.company_stage || 'Early-stage venture',
-      description: overview.company_description || overview.mission_statement || '',
-      core_technology: tech.core_technology || '',
-      key_capabilities: tech.key_innovations || [],
-      founding_team: full.team?.members || [],
-      funding_status: 'Not publicly disclosed',
-      market_opportunity: market.value_proposition || ''
+  getDefaultSection(section) {
+    const defaults = {
+      company_overview: {
+        name: '',
+        website: '',
+        founded_year: null,
+        headquarters: null,
+        company_stage: null,
+        employee_count: null,
+        mission_statement: '',
+        company_description: ''
+      },
+      technology: {
+        core_technology: '',
+        technology_category: '',
+        technical_approach: '',
+        key_innovations: [],
+        intellectual_property: {
+          patents_filed: null,
+          patents_granted: null,
+          patent_descriptions: [],
+          trade_secrets_mentioned: false
+        }
+      },
+      products_and_applications: {
+        primary_application: '',
+        products: [],
+        use_cases: [],
+        target_industries: []
+      },
+      team: {
+        founders: [],
+        key_executives: [],
+        advisors: []
+      },
+      funding_and_investors: {
+        total_funding: null,
+        funding_rounds: [],
+        government_grants: []
+      },
+      traction_and_metrics: {
+        customers: {
+          notable_customers: [],
+          customer_count: null,
+          customer_type: null
+        },
+        revenue: null,
+        growth_metrics: null,
+        partnerships: [],
+        achievements: []
+      },
+      recent_activity: {
+        last_12_months: [],
+        upcoming_milestones: []
+      },
+      market_context: {
+        industry: '',
+        sub_sector: null,
+        problem_addressed: '',
+        value_proposition: '',
+        business_model: null
+      },
+      data_quality_assessment: {
+        extraction_date: new Date().toISOString().split('T')[0],
+        primary_sources: [],
+        information_completeness: 'low',
+        missing_critical_information: [],
+        data_freshness: 'mixed',
+        confidence_notes: ''
+      }
     };
+    
+    return defaults[section] || {};
+  },
+
+  /**
+   * Parse amount string to number
+   */
+  parseAmount(amountStr) {
+    if (typeof amountStr === 'number') return amountStr;
+    if (!amountStr || typeof amountStr !== 'string') return null;
+    
+    // Extract number from strings like "$3M+" or "$412K"
+    const match = amountStr.match(/\$?([\d.]+)\s*(M|K|B)?/i);
+    if (!match) return null;
+    
+    let value = parseFloat(match[1]);
+    const suffix = (match[2] || '').toUpperCase();
+    
+    if (suffix === 'K') value *= 1000;
+    if (suffix === 'M') value *= 1000000;
+    if (suffix === 'B') value *= 1000000000;
+    
+    return value || null;
   },
 
   /**
@@ -291,23 +491,16 @@ const CompanyAPI = {
   getCompanyName(companyData) {
     if (!companyData) return 'Unknown Company';
     
-    // Check both full and short formats
     const full = companyData.full || companyData;
-    const short = companyData.short || {};
     
-    // Try short format first (most reliable)
-    if (short.company_name) return short.company_name;
+    // Try company_overview.name (new schema)
+    if (full.company_overview?.name) return full.company_overview.name;
     
-    // Try full format with company_profile structure
+    // Try legacy structures
     if (full.company_profile?.basic_information?.company_name) {
       return full.company_profile.basic_information.company_name;
     }
-    
-    // Try normalized company_overview structure
-    if (full.company_overview?.name) return full.company_overview.name;
-    if (full.company_overview?.company_name) return full.company_overview.company_name;
-    
-    // Fallback to top-level fields
+    if (full.company_profile?.name) return full.company_profile.name;
     if (full.company_name) return full.company_name;
     if (full.name) return full.name;
     
@@ -316,19 +509,20 @@ const CompanyAPI = {
 
   /**
    * Get short description for passing to other APIs
+   * Returns as TEXT string, not JSON
    */
   getShortDescription(companyData) {
     if (!companyData) return '';
     
+    // Short output is already a text string
     const short = companyData.short;
-    if (short) {
-      // Return as JSON string for API input
-      return JSON.stringify(short);
+    if (short && typeof short === 'string') {
+      return short;
     }
     
-    // Fallback: create from full
+    // Fallback: stringify the full data
     const full = companyData.full || companyData;
-    return JSON.stringify(this.createShortFromFull(full));
+    return JSON.stringify(full);
   }
 };
 
