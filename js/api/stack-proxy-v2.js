@@ -1,5 +1,5 @@
-// js/api/stack-proxy.js - Direct Stack AI calls with proxy for config/auth only
-// V2: This approach avoids Google Apps Script timeout limits by calling Stack AI directly from browser
+// js/api/stack-proxy-v2.js - Direct Stack AI calls with proxy for config/auth only
+// This approach avoids Google Apps Script timeout limits by calling Stack AI directly from browser
 
 const StackProxy = {
   // Google Apps Script proxy URL (only used for config and file uploads)
@@ -122,8 +122,6 @@ const StackProxy = {
       mimeType: file.type || this.getMimeType(file.name)
     };
     
-    console.log(`[StackProxy] Uploading file via proxy, size: ${file.size} bytes`);
-    
     // Upload via proxy
     const uploadResponse = await fetch(this.proxyUrl, {
       method: 'POST',
@@ -138,7 +136,7 @@ const StackProxy = {
       throw new Error('File upload failed: ' + (uploadResult.error || 'Unknown error'));
     }
     
-    console.log(`[StackProxy] File uploaded successfully, now calling workflow directly...`);
+    console.log(`[StackProxy] File uploaded, now calling workflow directly...`);
     
     // Step 2: Wait a moment for file to be processed
     await new Promise(resolve => setTimeout(resolve, 2000));

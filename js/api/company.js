@@ -159,54 +159,86 @@ const CompanyAPI = {
   /**
    * Ensure full output has required structure for display
    * Normalizes different API response formats to a consistent structure
+   * Handles multiple schema variations from Stack AI
    */
   ensureStructure(data) {
     // Handle case where data is wrapped in company_profile
     if (data.company_profile && !data.company_overview) {
-      // Convert company_profile structure to expected company_overview structure
       const profile = data.company_profile;
       
+      // Schema variant 1: company_profile.basic_information.company_name
+      // Schema variant 2: company_profile.name (direct)
+      const basicInfo = profile.basic_information || {};
+      const companyName = basicInfo.company_name || profile.name || '';
+      const website = basicInfo.website || profile.website || '';
+      const headquarters = basicInfo.headquarters || 
+                          (typeof profile.headquarters === 'object' ? profile.headquarters?.address : profile.headquarters) || '';
+      const founded = basicInfo.founded || profile.founded_year || '';
+      const industry = basicInfo.industry || '';
+      
+      // Get technology info - may be in profile.core_technology or data.core_technology
+      const coreTech = profile.core_technology || data.core_technology || {};
+      
       data.company_overview = {
-        name: profile.basic_information?.company_name || '',
-        company_name: profile.basic_information?.company_name || '',
-        website: profile.basic_information?.website || '',
-        headquarters: profile.basic_information?.headquarters || '',
-        founded_year: profile.basic_information?.founded || '',
-        industry: profile.basic_information?.industry || '',
-        business_model: profile.basic_information?.business_model || '',
-        company_stage: profile.company_stage?.stage || '',
-        stage_description: profile.company_stage?.description || '',
+        name: companyName,
+        company_name: companyName,
+        website: website,
+        headquarters: headquarters,
+        founded_year: founded,
+        industry: industry,
+        business_model: basicInfo.business_model || '',
+        company_stage: profile.company_stage?.stage || data.company_stage?.stage || '',
+        stage_description: profile.company_stage?.description || profile.company_stage?.stage_description || '',
         stage_evidence: profile.company_stage?.evidence || '',
-        company_description: profile.core_technology?.technology_description || ''
+        company_description: coreTech.technology_description || profile.operating_status || ''
       };
       
       data.technology = {
-        core_technology: profile.core_technology?.technology_name || '',
-        technology_description: profile.core_technology?.technology_description || '',
-        problem_solved: profile.core_technology?.problem_solved || '',
-        key_components: profile.core_technology?.key_technical_components || {},
-        specifications: profile.core_technology?.performance_specifications || {},
-        differentiation: profile.core_technology?.differentiation || ''
+        core_technology: coreTech.technology_name || coreTech.primary_innovation || coreTech.technology_category || '',
+        technology_description: coreTech.technology_description || '',
+        problem_solved: coreTech.problem_solved || '',
+        key_components: coreTech.key_technical_components || coreTech.key_technical_features || {},
+        specifications: coreTech.performance_specifications || data.product_specifications || {},
+        differentiation: coreTech.differentiation || '',
+        applications: coreTech.technology_applications || []
       };
       
+      // Handle technology_applications or market_opportunity
+      const techApps = profile.technology_applications || data.market_opportunity || {};
       data.products_and_applications = {
-        primary_markets: profile.technology_applications?.primary_markets || [],
-        use_cases: profile.technology_applications?.use_cases || [],
-        market_opportunity: profile.technology_applications?.market_opportunity || ''
+        primary_markets: techApps.primary_markets || techApps.target_markets || [],
+        use_cases: techApps.use_cases || [],
+        market_opportunity: techApps.market_opportunity || techApps.market_size_context || ''
       };
       
+      // Handle competitive_landscape
+      const compLandscape = profile.competitive_landscape || data.competitive_landscape || {};
       data.market_context = {
-        market_position: profile.competitive_landscape?.market_position || '',
-        competitors: profile.competitive_landscape?.key_competitors || [],
-        competitive_advantages: profile.competitive_landscape?.competitive_advantages || [],
-        market_trends: profile.competitive_landscape?.market_trends || ''
+        market_position: compLandscape.market_position || '',
+        competitors: compLandscape.key_competitors || compLandscape.direct_competitors || [],
+        competitive_advantages: compLandscape.competitive_advantages || compLandscape.oceancomm_differentiation || [],
+        market_trends: compLandscape.market_trends || ''
       };
       
-      data.funding = profile.funding_and_investors || {};
-      data.team = profile.team_and_leadership || {};
-      data.recent_activities = profile.recent_activities_and_milestones || {};
-      data.intellectual_property = profile.intellectual_property || {};
-      data.data_quality = profile.data_quality_and_gaps || {};
+      data.funding = profile.funding_and_investors || data.funding_history || {};
+      data.team = profile.team_and_leadership || data.founders_and_leadership || {};
+      data.recent_activities = profile.recent_activities_and_milestones || data.recent_activities_and_milestones || {};
+      data.intellectual_property = profile.intellectual_property || data.technology_validation?.patents_and_ip || {};
+      data.data_quality = profile.data_quality_and_gaps || data.data_quality || {};
+    }
+    
+    // Also handle case where core_technology is at root level (schema variant 2)
+    if (data.core_technology && !data.technology) {
+      const coreTech = data.core_technology;
+      data.technology = {
+        core_technology: coreTech.technology_name || coreTech.primary_innovation || coreTech.technology_category || '',
+        technology_description: coreTech.technology_description || '',
+        problem_solved: coreTech.problem_solved || '',
+        key_components: coreTech.key_technical_components || coreTech.key_technical_features || {},
+        specifications: coreTech.performance_specifications || data.product_specifications || {},
+        differentiation: coreTech.differentiation || '',
+        applications: coreTech.technology_applications || []
+      };
     }
     
     // Ensure required sections exist (even if empty)
