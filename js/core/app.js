@@ -408,7 +408,14 @@ class App {
     Object.entries(completedPhases).forEach(([phase, data]) => {
       const tabKey = phase === 'company' ? 'overview' : phase;
       this.tabManager.enableTab(tabKey);
-      this.loadPhaseData(phase, data);
+      
+      // Company data might be { full, short } or just the data
+      if (phase === 'company') {
+        const companyData = data?.full || data;
+        this.assessmentView.loadCompanyData(companyData);
+      } else {
+        this.loadPhaseData(phase, data);
+      }
     });
     
     // Restore user scores
@@ -433,7 +440,10 @@ class App {
   loadPhaseData(phase, data) {
     switch (phase) {
       case 'company':
-        this.assessmentView.loadCompanyData(data);
+        // Company data comes as { full, short } - we need full for display
+        const companyData = data?.full || data;
+        console.log('[App] Loading company data, keys:', Object.keys(companyData || {}));
+        this.assessmentView.loadCompanyData(companyData);
         break;
       case 'team':
         this.assessmentView.loadTeamData(data);
@@ -538,8 +548,9 @@ class App {
     const exportBtn = document.getElementById('export-btn');
     if (exportBtn) exportBtn.disabled = false;
     
-    // Desktop notification
-    const companyName = results.company?.company_overview?.name || 'Company';
+    // Desktop notification - company data might be { full, short } or just the data
+    const companyFull = results.company?.full || results.company;
+    const companyName = companyFull?.company_overview?.name || 'Company';
     this.showDesktopNotification(
       'Analysis Complete!',
       `${companyName} assessment is ready for review`
