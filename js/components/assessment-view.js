@@ -702,7 +702,7 @@ class AssessmentView {
                 </tr>
               </thead>
               <tbody>
-                ${marketDeals.filter((d, i, arr) => arr.findIndex(x => (x.company || x.startup_name) === (d.company || d.startup_name)) === i).slice(0, 7).map(d => `
+                ${marketDeals.map(d => `
                   <tr>
                     <td><strong>${this.escape(d.company || d.startup_name)}</strong></td>
                     <td>${this.escape(d.series || d.round || 'N/A')}</td>
@@ -722,7 +722,7 @@ class AssessmentView {
       label: r.type,
       url: r.url
     }));
-    const dealSourceList = marketDeals.filter(d => d.url || d.source_url).slice(0, 5).map(d => ({
+    const dealSourceList = marketDeals.filter(d => d.url || d.source_url).map(d => ({
       label: d.company || d.startup_name,
       url: d.url || d.source_url
     }));

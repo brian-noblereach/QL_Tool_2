@@ -3,7 +3,7 @@
 
 const StackProxy = {
   // Google Apps Script proxy URL (only used for config and file uploads)
-  proxyUrl: 'https://script.google.com/macros/s/AKfycbzt7wE1vzQv0CNs-icg7QWpxjf4E5F_HLTpnn8GJa2W/exec',
+  proxyUrl: 'https://script.google.com/macros/s/AKfycbzt7wElvzQv0CNs-icg7QWpxjf4E5FGqWa6KpCY4zSa_thccGNWhw-THLTpnn8GJa2W/exec',
   
   // Cached config from proxy
   config: null,
