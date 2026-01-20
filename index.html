@@ -59,7 +59,7 @@
       <div class="input-container">
         <div class="input-header">
           <h2>Venture Assessment</h2>
-          <p>Enter a company website URL to begin the AI-powered analysis. The assessment takes approximately 8-12 minutes to complete.</p>
+          <p>Enter a company website, upload a document, or provide both to begin the AI-powered analysis. The assessment takes approximately 8-12 minutes to complete.</p>
         </div>
         
         <form id="assessment-form" class="assessment-form">
@@ -73,14 +73,14 @@
                 placeholder="https://example.com"
                 autocomplete="url"
               >
-              <span class="input-hint">Enter the main website URL for the company you want to assess</span>
+              <span class="input-hint">Enter the company's website URL (optional if uploading a document)</span>
             </div>
           </div>
           
           <!-- File Upload Section -->
           <div class="form-row">
             <div class="form-group flex-1">
-              <label for="company-file">Supporting Document <span class="label-optional">(optional)</span></label>
+              <label for="company-file">Company Document</label>
               <div class="file-upload-zone" id="file-upload-zone">
                 <input 
                   type="file" 
@@ -119,7 +119,7 @@
                   </button>
                 </div>
               </div>
-              <span class="input-hint">Upload a pitch deck, executive summary, or company overview to enhance the analysis</span>
+              <span class="input-hint">Upload a pitch deck, executive summary, or company overview. Can be used alone or with a website URL.</span>
             </div>
           </div>
           
@@ -151,6 +151,13 @@
           </div>
           
           <div class="form-actions">
+            <button type="button" id="load-previous-btn" class="btn outline">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                <path d="M3 3v5h5"/>
+              </svg>
+              Load Previous
+            </button>
             <button type="submit" id="start-btn" class="btn primary large">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="12" cy="12" r="10"/>
@@ -379,7 +386,7 @@
                 </div>
               </div>
               <div class="scoring-section">
-                <div class="scoring-card">
+                <div class="scoring-card" id="team-scoring-card">
                   <h3>Your Assessment</h3>
                   <div class="score-slider-container">
                     <label for="team-score-slider">Score (1-9)</label>
@@ -428,7 +435,7 @@
                 </div>
               </div>
               <div class="scoring-section">
-                <div class="scoring-card">
+                <div class="scoring-card" id="funding-scoring-card">
                   <h3>Your Assessment</h3>
                   <div class="score-slider-container">
                     <label for="funding-score-slider">Score (1-9)</label>
@@ -477,7 +484,7 @@
                 </div>
               </div>
               <div class="scoring-section">
-                <div class="scoring-card">
+                <div class="scoring-card" id="competitive-scoring-card">
                   <h3>Your Assessment</h3>
                   <div class="score-slider-container">
                     <label for="competitive-score-slider">Score (1-9)</label>
@@ -526,7 +533,7 @@
                 </div>
               </div>
               <div class="scoring-section">
-                <div class="scoring-card">
+                <div class="scoring-card" id="market-scoring-card">
                   <h3>Your Assessment</h3>
                   <div class="score-slider-container">
                     <label for="market-score-slider">Score (1-9)</label>
@@ -575,7 +582,7 @@
                 </div>
               </div>
               <div class="scoring-section">
-                <div class="scoring-card">
+                <div class="scoring-card" id="iprisk-scoring-card">
                   <h3>Your Assessment</h3>
                   <div class="score-slider-container">
                     <label for="iprisk-score-slider">Score (1-9)</label>

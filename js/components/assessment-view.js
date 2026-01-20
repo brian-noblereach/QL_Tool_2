@@ -21,11 +21,11 @@ class AssessmentView {
     };
     
     this.userScores = {
-      team: { score: null, justification: '', submitted: false },
-      funding: { score: null, justification: '', submitted: false },
-      competitive: { score: null, justification: '', submitted: false },
-      market: { score: null, justification: '', submitted: false },
-      iprisk: { score: null, justification: '', submitted: false }
+      team: { score: null, justification: '', submitted: false, timesSubmitted: 0 },
+      funding: { score: null, justification: '', submitted: false, timesSubmitted: 0 },
+      competitive: { score: null, justification: '', submitted: false, timesSubmitted: 0 },
+      market: { score: null, justification: '', submitted: false, timesSubmitted: 0 },
+      iprisk: { score: null, justification: '', submitted: false, timesSubmitted: 0 }
     };
     
     this.aiScores = {
@@ -87,11 +87,11 @@ class AssessmentView {
         2: { label: 'Limited Experience', description: 'Completed a few small projects or published in minor journals. Limited visibility within a very small professional or academic circle.' },
         3: { label: 'Growing Portfolio', description: 'Growing portfolio of projects or publications in peer-reviewed journals. Building a network within their specific field.' },
         4: { label: 'Local Recognition', description: 'Recognized within their specific field or local area. Occasionally invited to present at seminars or local industry events.' },
-        5: { label: 'Consistent Record', description: 'Consistent record of quality publications or successful industry projects. Regular participant in conferences or industry events.' },
-        6: { label: 'Field Leader', description: 'Publications in top-tier journals or lead complex industry projects. Frequently invited to speak at conferences or contribute to industry standards.' },
-        7: { label: 'Highly Cited', description: 'Work is often cited or used as case studies in the field. Lead significant research grants or hold patents for industry innovations.' },
-        8: { label: 'Industry Influencer', description: 'Research or innovations significantly influence the direction of their field. Hold leadership positions in academia or industry.' },
-        9: { label: 'Groundbreaking', description: 'Made groundbreaking discoveries that reshaped their entire field. Recipients of the highest honors or lead global organizations.' }
+        5: { label: 'Solid Track Record', description: 'Consistent publications or successful projects. Some tech licensing, patents, or industry partnership experience.' },
+        6: { label: 'Commercialization Experience', description: 'Top-tier publications or complex projects. Direct commercialization experience (licensing, SBIR/STTR, startup advisory).' },
+        7: { label: 'Business Leadership', description: 'Cited work or case studies. Has held business leadership roles with established industry network.' },
+        8: { label: 'Founder/Executive Experience', description: 'Field-influencing research OR previous founder/executive role in a commercialized venture.' },
+        9: { label: 'Serial Success', description: 'Groundbreaking discoveries with proven entrepreneurial success OR serial entrepreneur with successful exit.' }
       },
       funding: {
         1: { label: 'No Activity', description: 'No comparable funding activity in sector. Market shows minimal investor interest.' },
@@ -233,27 +233,58 @@ class AssessmentView {
     const justificationEl = document.getElementById(`${dimension}-justification`);
     const submitBtn = document.getElementById(`${dimension}-submit-btn`);
     const slider = document.getElementById(`${dimension}-score-slider`);
+    const scoringCard = document.getElementById(`${dimension}-scoring-card`);
     
     const score = this.userScores[dimension].score || parseInt(slider?.value) || 5;
     const justification = justificationEl?.value || '';
+    const isUpdate = this.userScores[dimension].submitted;
     
-    this.userScores[dimension] = { score, justification, submitted: true };
+    // Update state
+    this.userScores[dimension].score = score;
+    this.userScores[dimension].justification = justification;
+    this.userScores[dimension].submitted = true;
+    this.userScores[dimension].timesSubmitted++;
     
-    console.log(`Assessment submitted for ${dimension}:`, { score, justification, submitted: true });
+    console.log(`Assessment ${isUpdate ? 'updated' : 'submitted'} for ${dimension}:`, { score, justification, timesSubmitted: this.userScores[dimension].timesSubmitted });
     
+    // Update button to show submitted/update state
     if (submitBtn) {
-      submitBtn.textContent = '✓ Submitted';
-      submitBtn.disabled = true;
       submitBtn.classList.add('submitted');
+      submitBtn.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+        ${isUpdate ? 'Updated' : 'Submitted'}
+      `;
+      
+      // After a brief moment, switch to "Update" state
+      setTimeout(() => {
+        submitBtn.classList.remove('submitted');
+        submitBtn.classList.add('update-mode');
+        submitBtn.innerHTML = `
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+          </svg>
+          Update Score
+        `;
+        submitBtn.disabled = false;
+      }, 1500);
     }
-    if (slider) slider.disabled = true;
-    if (justificationEl) justificationEl.disabled = true;
+    
+    // Add visual indicator to scoring card
+    if (scoringCard) {
+      scoringCard.classList.add('has-submission');
+    }
+    
+    // Keep slider and justification ENABLED for updates
+    // (removed the disabling code)
     
     if (window.app?.stateManager) {
       window.app.stateManager.saveUserScore(dimension, { score, justification });
     }
     if (window.app?.toastManager) {
-      window.app.toastManager.success(`${this.capitalize(dimension)} assessment submitted`);
+      window.app.toastManager.success(`${this.capitalize(dimension)} assessment ${isUpdate ? 'updated' : 'submitted'}`);
     }
     
     // Submit to Smartsheet
@@ -273,6 +304,9 @@ class AssessmentView {
     } else {
       console.warn('Could not update summary:', { summaryView: !!window.summaryView, data: !!this.data });
     }
+    
+    // Check if all scores are now submitted - trigger auto-submit check
+    this.checkAllScoresSubmitted();
   }
 
   /**
@@ -297,6 +331,74 @@ class AssessmentView {
     };
 
     await window.SmartsheetIntegration.submitScore(dimension, scoreData, context);
+  }
+
+  /**
+   * Check if all 5 scores have been submitted and trigger final submit modal
+   */
+  checkAllScoresSubmitted() {
+    const dimensions = ['team', 'funding', 'competitive', 'market', 'iprisk'];
+    const allSubmitted = dimensions.every(dim => this.userScores[dim].submitted);
+    
+    if (allSubmitted) {
+      console.log('[AssessmentView] All scores submitted, triggering final submit check');
+      
+      // Gather data for the modal
+      const scores = {};
+      const missingJustifications = [];
+      
+      dimensions.forEach(dim => {
+        scores[dim] = {
+          aiScore: this.aiScores[dim],
+          userScore: this.userScores[dim].score,
+          justification: this.userScores[dim].justification
+        };
+        
+        if (!this.userScores[dim].justification || this.userScores[dim].justification.trim() === '') {
+          missingJustifications.push(dim);
+        }
+      });
+      
+      // Calculate averages
+      const aiScoreSum = dimensions.reduce((sum, dim) => sum + (this.aiScores[dim] || 0), 0);
+      const userScoreSum = dimensions.reduce((sum, dim) => sum + (this.userScores[dim].score || 0), 0);
+      const avgAiScore = (aiScoreSum / dimensions.length).toFixed(1);
+      const avgUserScore = (userScoreSum / dimensions.length).toFixed(1);
+      
+      // Notify app to show the final submit modal
+      if (window.app?.showFinalSubmitModal) {
+        window.app.showFinalSubmitModal({
+          scores,
+          missingJustifications,
+          avgAiScore,
+          avgUserScore
+        });
+      }
+    }
+  }
+
+  /**
+   * Get the submission status for all dimensions
+   * @returns {Object} Status object with counts and details
+   */
+  getSubmissionStatus() {
+    const dimensions = ['team', 'funding', 'competitive', 'market', 'iprisk'];
+    const submitted = dimensions.filter(dim => this.userScores[dim].submitted);
+    const pending = dimensions.filter(dim => !this.userScores[dim].submitted);
+    const missingJustifications = dimensions.filter(dim => 
+      this.userScores[dim].submitted && 
+      (!this.userScores[dim].justification || this.userScores[dim].justification.trim() === '')
+    );
+    
+    return {
+      totalCount: dimensions.length,
+      submittedCount: submitted.length,
+      pendingCount: pending.length,
+      submitted,
+      pending,
+      missingJustifications,
+      allSubmitted: submitted.length === dimensions.length
+    };
   }
 
   setUserScore(dimension, scoreData) {
@@ -546,7 +648,7 @@ class AssessmentView {
           <h4>Data Sources</h4>
           ${sources.length > 0 ? `
             <ul class="source-list">
-              ${sources.map(s => `<li><a href="${this.escape(s)}" target="_blank" rel="noopener">${this.truncateUrl(s)}</a></li>`).join('')}
+              ${sources.map(s => `<li><a href="${this.escape(this.cleanSourceUrl(s))}" target="_blank" rel="noopener">${this.truncateUrl(s)}</a></li>`).join('')}
             </ul>
           ` : '<p>No sources available.</p>'}
         </div>
@@ -574,6 +676,159 @@ class AssessmentView {
   }
 
   // ========== FUNDING DATA ==========
+  
+  shouldShowTimeline(fundingRounds, marketDeals) {
+    // Show timeline if there's any activity in the last 5 years
+    const fiveYearsAgo = new Date();
+    fiveYearsAgo.setFullYear(fiveYearsAgo.getFullYear() - 5);
+    
+    const recentVentureActivity = fundingRounds.some(r => {
+      if (!r.date) return false;
+      const date = new Date(r.date);
+      return date >= fiveYearsAgo;
+    });
+    
+    const recentMarketActivity = marketDeals.some(d => {
+      if (!d.date && !d.deal_date) return false;
+      const date = new Date(d.date || d.deal_date);
+      return date >= fiveYearsAgo;
+    });
+    
+    return recentVentureActivity || recentMarketActivity;
+  }
+  
+  renderFundingTimeline(fundingRounds, marketDeals) {
+    const currentYear = new Date().getFullYear();
+    const years = [currentYear - 4, currentYear - 3, currentYear - 2, currentYear - 1, currentYear];
+    
+    // Filter and organize data by year
+    const ventureByYear = {};
+    const marketByYear = {};
+    
+    years.forEach(year => {
+      ventureByYear[year] = [];
+      marketByYear[year] = [];
+    });
+    
+    // Process venture funding rounds
+    fundingRounds.forEach(r => {
+      if (!r.date) return;
+      const year = new Date(r.date).getFullYear();
+      if (ventureByYear[year] !== undefined) {
+        ventureByYear[year].push({
+          date: r.date,
+          type: r.type,
+          amount: r.amount,
+          description: r.description
+        });
+      }
+    });
+    
+    // Process market deals
+    marketDeals.forEach(d => {
+      const date = d.date || d.deal_date;
+      if (!date) return;
+      const year = new Date(date).getFullYear();
+      if (marketByYear[year] !== undefined) {
+        marketByYear[year].push({
+          date: date,
+          company: d.company || d.startup_name,
+          series: d.series || d.round,
+          amount: d.amount || d.funding_amount?.amount
+        });
+      }
+    });
+    
+    // Render timeline
+    let html = '<div class="funding-timeline-visual">';
+    
+    years.forEach(year => {
+      const ventureCount = ventureByYear[year].length;
+      const marketCount = marketByYear[year].length;
+      const hasActivity = ventureCount > 0 || marketCount > 0;
+      
+      html += `
+        <div class="timeline-year ${hasActivity ? 'has-activity' : ''}">
+          <div class="timeline-year-label">${year}</div>
+          <div class="timeline-bars">
+            <div class="timeline-bar venture-bar" title="${ventureCount} venture round${ventureCount !== 1 ? 's' : ''}">
+              ${ventureCount > 0 ? `
+                <div class="timeline-bar-fill" style="height: ${Math.min(ventureCount * 30, 100)}%">
+                  <span class="timeline-bar-count">${ventureCount}</span>
+                </div>
+              ` : '<div class="timeline-bar-empty"></div>'}
+            </div>
+            <div class="timeline-bar market-bar" title="${marketCount} market deal${marketCount !== 1 ? 's' : ''}">
+              ${marketCount > 0 ? `
+                <div class="timeline-bar-fill" style="height: ${Math.min(marketCount * 20, 100)}%">
+                  <span class="timeline-bar-count">${marketCount}</span>
+                </div>
+              ` : '<div class="timeline-bar-empty"></div>'}
+            </div>
+          </div>
+          ${hasActivity ? `
+            <div class="timeline-year-details">
+              ${ventureCount > 0 ? `
+                <div class="timeline-detail venture-detail">
+                  <strong>Venture (${ventureCount}):</strong>
+                  ${ventureByYear[year].slice(0, 2).map(v => {
+                    let formattedAmount = 'Undisclosed';
+                    if (v.amount && v.amount !== 'undisclosed' && v.amount !== 'Unknown') {
+                      const amountStr = String(v.amount).toLowerCase();
+                      const numMatch = amountStr.match(/[\d,.]+/);
+                      if (numMatch) {
+                        const num = parseFloat(numMatch[0].replace(/,/g, ''));
+                        if (!isNaN(num)) {
+                          if (amountStr.includes('million') || amountStr.includes('m')) {
+                            formattedAmount = this.formatCurrencyWithCommas(num, true);
+                          } else {
+                            formattedAmount = this.formatCurrencyWithCommas(num / 1000000, true);
+                          }
+                        }
+                      }
+                    }
+                    return `<div class="timeline-item">${this.escape(v.type)} - ${formattedAmount}</div>`;
+                  }).join('')}
+                  ${ventureCount > 2 ? `<div class="timeline-more">+${ventureCount - 2} more</div>` : ''}
+                </div>
+              ` : ''}
+              ${marketCount > 0 ? `
+                <div class="timeline-detail market-detail">
+                  <strong>Market (${marketCount}):</strong>
+                  ${marketByYear[year].slice(0, 2).map(m => {
+                    let formattedAmount = 'Undisclosed';
+                    if (m.amount) {
+                      if (typeof m.amount === 'number') {
+                        formattedAmount = this.formatCurrencyWithCommas(m.amount, true);
+                      }
+                    }
+                    return `<div class="timeline-item">${this.escape(m.company)} - ${formattedAmount}</div>`;
+                  }).join('')}
+                  ${marketCount > 2 ? `<div class="timeline-more">+${marketCount - 2} more</div>` : ''}
+                </div>
+              ` : ''}
+            </div>
+          ` : ''}
+        </div>
+      `;
+    });
+    
+    html += '</div>';
+    html += `
+      <div class="timeline-legend">
+        <div class="legend-item">
+          <div class="legend-color venture-color"></div>
+          <span>Venture Funding Rounds</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-color market-color"></div>
+          <span>Comparable Market Deals</span>
+        </div>
+      </div>
+    `;
+    
+    return html;
+  }
   
   loadFundingData(data) {
     this.data.funding = data;
@@ -615,7 +870,24 @@ class AssessmentView {
     const justification = assessmentRaw?.score_justification || {};
     const evidenceSummary = formatted.summary || justification?.evidence_summary || '';
     
-    // SUMMARY VIEW
+    // Get industry/application context
+    const applicationArea = analysisRaw?.application_area || formatted.applicationArea || '';
+    const researchTopic = analysisRaw?.research_topic || formatted.researchTopic || '';
+    
+    // Calculate total VC activity in the space
+    const totalVCInvested = marketDeals.reduce((sum, deal) => {
+      const amount = deal.amount || deal.funding_amount?.amount;
+      return sum + (typeof amount === 'number' ? amount : 0);
+    }, 0);
+    
+    // Get unique investors across all market deals
+    const uniqueInvestors = new Set();
+    marketDeals.forEach(deal => {
+      const investors = deal.investors || deal.vc_firms || [];
+      investors.forEach(inv => uniqueInvestors.add(inv));
+    });
+    
+    // SUMMARY VIEW - Now shows both venture and market activity
     const summaryHTML = `
       <div class="evidence-content">
         <div class="metrics-row">
@@ -624,7 +896,7 @@ class AssessmentView {
             <span class="metric-value">${formatted.hasPriorFunding || ventureFunding.has_prior_funding ? 'Yes' : 'No'}</span>
           </div>
           <div class="metric-card">
-            <span class="metric-label">Rounds</span>
+            <span class="metric-label">Venture Rounds</span>
             <span class="metric-value">${formatted.totalFundingRounds || fundingRounds.length}</span>
           </div>
           <div class="metric-card">
@@ -642,21 +914,145 @@ class AssessmentView {
           <div class="ai-rationale">${this.formatRationale(evidenceSummary)}</div>
         </div>
         
-        ${fundingRounds.length > 0 ? `
+        ${this.shouldShowTimeline(fundingRounds, marketDeals) ? `
           <div class="evidence-section">
-            <h4>Company Funding Activity</h4>
-            <div class="funding-timeline">
-              ${fundingRounds.slice(0, 3).map(r => `
-                <div class="funding-event">
-                  <span class="funding-date">${this.formatDate(r.date)}</span>
-                  <span class="funding-type">${this.escape(r.type)}</span>
-                  <span class="funding-amount">${r.amount && r.amount !== 'undisclosed' && r.amount !== 'Unknown' ? r.amount : 'Undisclosed'}</span>
-                </div>
-              `).join('')}
-              ${fundingRounds.length > 3 ? `<p class="more-link">+ ${fundingRounds.length - 3} more rounds in detailed view</p>` : ''}
-            </div>
+            <h4>Funding Activity Timeline (Last 5 Years)</h4>
+            ${this.renderFundingTimeline(fundingRounds, marketDeals)}
           </div>
         ` : ''}
+        
+        <div class="two-column-grid">
+          ${fundingRounds.length > 0 ? `
+            <div class="evidence-section">
+              <h4>Venture Funding History</h4>
+              <div class="funding-timeline">
+                ${fundingRounds.slice(0, 3).map(r => {
+                  // Parse and format the amount properly
+                  let formattedAmount = 'Undisclosed';
+                  if (r.amount && r.amount !== 'undisclosed' && r.amount !== 'Unknown') {
+                    // Check if it's a number or string that needs parsing
+                    const amountStr = String(r.amount).toLowerCase();
+                    
+                    // Try to extract numeric value
+                    const numMatch = amountStr.match(/[\d,.]+/);
+                    if (numMatch) {
+                      const num = parseFloat(numMatch[0].replace(/,/g, ''));
+                      if (!isNaN(num)) {
+                        // Check if the original string indicates it's already in millions
+                        if (amountStr.includes('million') || amountStr.includes('m')) {
+                          formattedAmount = this.formatCurrencyWithCommas(num, true);
+                        } else {
+                          // Assume it's in actual dollars, convert to millions
+                          formattedAmount = this.formatCurrencyWithCommas(num / 1000000, true);
+                        }
+                      } else {
+                        formattedAmount = r.amount;
+                      }
+                    } else {
+                      formattedAmount = r.amount;
+                    }
+                  }
+                  return `
+                    <div class="funding-event">
+                      <span class="funding-date">${this.formatDate(r.date)}</span>
+                      <span class="funding-type">${this.escape(r.type)}</span>
+                      <span class="funding-amount">${formattedAmount}</span>
+                    </div>
+                  `;
+                }).join('')}
+                ${fundingRounds.length > 3 ? `<p class="more-link">+ ${fundingRounds.length - 3} more rounds in detailed view</p>` : ''}
+              </div>
+            </div>
+          ` : `
+            <div class="evidence-section">
+              <h4>Venture Funding History</h4>
+              <p class="no-data-message">No prior funding rounds identified for this venture.</p>
+            </div>
+          `}
+          
+          ${marketDeals.length > 0 ? `
+            <div class="evidence-section">
+              <h4>Industry VC Activity</h4>
+              ${applicationArea ? `
+                <p class="industry-context"><strong>Application Area:</strong> ${this.escape(applicationArea)}</p>
+              ` : ''}
+              <div class="vc-activity-summary">
+                <div class="vc-stat">
+                  <span class="vc-stat-label">Total Invested</span>
+                  <span class="vc-stat-value">${totalVCInvested > 0 ? this.formatCurrencyWithCommas(totalVCInvested) : 'Not disclosed'}</span>
+                </div>
+                <div class="vc-stat">
+                  <span class="vc-stat-label">Active VCs</span>
+                  <span class="vc-stat-value">${uniqueInvestors.size} firms</span>
+                </div>
+              </div>
+              <div class="recent-deals-list">
+                <strong>Recent Comparable Deals:</strong>
+                ${marketDeals.slice(0, 3).map(d => {
+                  // Format deal amount properly - handle both formatted and raw data structures
+                  let dealAmount = 'Undisclosed';
+                  
+                  // Try to get the amount from either structure
+                  let amount = null;
+                  if (d.amount !== undefined && d.amount !== null) {
+                    amount = d.amount;
+                  } else if (d.funding_amount && d.funding_amount.amount !== undefined && d.funding_amount.amount !== null) {
+                    amount = d.funding_amount.amount;
+                  }
+                  
+                  if (amount !== null) {
+                    if (typeof amount === 'number') {
+                      // API returns amounts in millions - pass directly to formatter
+                      // The formatter expects values in millions (e.g., 10 = $10M)
+                      dealAmount = this.formatCurrencyWithCommas(amount, true);
+                    } else {
+                      // It's a string, try to parse it
+                      const amountStr = String(amount).toLowerCase();
+                      const numMatch = amountStr.match(/[\d,.]+/);
+                      if (numMatch) {
+                        const num = parseFloat(numMatch[0].replace(/,/g, ''));
+                        if (!isNaN(num)) {
+                          // Check if string indicates millions/billions or is raw dollars
+                          if (amountStr.includes('billion') || amountStr.includes('b')) {
+                            dealAmount = this.formatCurrencyWithCommas(num * 1000, true); // Convert billions to millions
+                          } else if (amountStr.includes('million') || amountStr.includes('m')) {
+                            dealAmount = this.formatCurrencyWithCommas(num, true);
+                          } else if (num > 1000) {
+                            // Large number without unit - assume raw dollars, convert to millions
+                            dealAmount = this.formatCurrencyWithCommas(num / 1000000, true);
+                          } else {
+                            // Small number without unit - assume already in millions
+                            dealAmount = this.formatCurrencyWithCommas(num, true);
+                          }
+                        } else {
+                          dealAmount = String(amount);
+                        }
+                      } else {
+                        dealAmount = String(amount);
+                      }
+                    }
+                  }
+                  return `
+                    <div class="market-deal-item">
+                      <span class="deal-company">${this.escape(d.company || d.startup_name)}</span>
+                      <span class="deal-series">${this.escape(d.series || d.round || 'N/A')}</span>
+                      <span class="deal-amount">${dealAmount}</span>
+                    </div>
+                  `;
+                }).join('')}
+                ${marketDeals.length > 3 ? `<p class="more-link">+ ${marketDeals.length - 3} more deals in detailed view</p>` : ''}
+              </div>
+            </div>
+          ` : `
+            <div class="evidence-section">
+              <h4>Industry VC Activity</h4>
+              ${applicationArea ? `
+                <p class="industry-context"><strong>Application Area:</strong> ${this.escape(applicationArea)}</p>
+              ` : ''}
+              <p class="no-data-message">Limited comparable VC deals found in this application area.</p>
+            </div>
+          `}
+        </div>
       </div>
     `;
     
@@ -676,14 +1072,36 @@ class AssessmentView {
                 </tr>
               </thead>
               <tbody>
-                ${fundingRounds.map(r => `
-                  <tr>
-                    <td>${this.formatDate(r.date)}</td>
-                    <td>${this.escape(r.type)}</td>
-                    <td>${r.amount && r.amount !== 'undisclosed' && r.amount !== 'Unknown' ? r.amount : 'Undisclosed'}</td>
-                    <td class="details-cell">${this.escape(this.truncate(r.description || r.source || '', 100))}</td>
-                  </tr>
-                `).join('')}
+                ${fundingRounds.map(r => {
+                  // Format amount properly
+                  let formattedAmount = 'Undisclosed';
+                  if (r.amount && r.amount !== 'undisclosed' && r.amount !== 'Unknown') {
+                    const amountStr = String(r.amount).toLowerCase();
+                    const numMatch = amountStr.match(/[\d,.]+/);
+                    if (numMatch) {
+                      const num = parseFloat(numMatch[0].replace(/,/g, ''));
+                      if (!isNaN(num)) {
+                        if (amountStr.includes('million') || amountStr.includes('m')) {
+                          formattedAmount = this.formatCurrencyWithCommas(num, true);
+                        } else {
+                          formattedAmount = this.formatCurrencyWithCommas(num / 1000000, true);
+                        }
+                      } else {
+                        formattedAmount = r.amount;
+                      }
+                    } else {
+                      formattedAmount = r.amount;
+                    }
+                  }
+                  return `
+                    <tr>
+                      <td>${this.formatDate(r.date)}</td>
+                      <td>${this.escape(r.type)}</td>
+                      <td>${formattedAmount}</td>
+                      <td class="details-cell">${this.escape(this.truncate(r.description || r.source || '', 100))}</td>
+                    </tr>
+                  `;
+                }).join('')}
               </tbody>
             </table>
           ` : '<p>No funding rounds identified.</p>'}
@@ -691,6 +1109,9 @@ class AssessmentView {
         
         <div class="evidence-section">
           <h4>Comparable Market Deals (${marketDeals.length})</h4>
+          ${applicationArea ? `
+            <p class="industry-context" style="margin-bottom: 12px;"><strong>Application Area:</strong> ${this.escape(applicationArea)}</p>
+          ` : ''}
           ${marketDeals.length > 0 ? `
             <table class="data-table">
               <thead>
@@ -702,14 +1123,57 @@ class AssessmentView {
                 </tr>
               </thead>
               <tbody>
-                ${marketDeals.map(d => `
-                  <tr>
-                    <td><strong>${this.escape(d.company || d.startup_name)}</strong></td>
-                    <td>${this.escape(d.series || d.round || 'N/A')}</td>
-                    <td>${d.amount ? '$' + d.amount + 'M' : (d.funding_amount?.amount ? '$' + d.funding_amount.amount + 'M' : 'Undisclosed')}</td>
-                    <td class="investors-cell">${(d.investors || d.vc_firms || []).slice(0, 2).map(v => this.escape(v)).join(', ')}${(d.investors || d.vc_firms || []).length > 2 ? '...' : ''}</td>
-                  </tr>
-                `).join('')}
+                ${marketDeals.map(d => {
+                  // Format deal amount - handle both formatted and raw data structures
+                  let dealAmount = 'Undisclosed';
+                  
+                  // Try to get the amount from either structure
+                  let amount = null;
+                  if (d.amount !== undefined && d.amount !== null) {
+                    amount = d.amount;
+                  } else if (d.funding_amount && d.funding_amount.amount !== undefined && d.funding_amount.amount !== null) {
+                    amount = d.funding_amount.amount;
+                  }
+                  
+                  if (amount !== null) {
+                    if (typeof amount === 'number') {
+                      // API returns amounts in millions - pass directly to formatter
+                      dealAmount = this.formatCurrencyWithCommas(amount, true);
+                    } else {
+                      const amountStr = String(amount).toLowerCase();
+                      const numMatch = amountStr.match(/[\d,.]+/);
+                      if (numMatch) {
+                        const num = parseFloat(numMatch[0].replace(/,/g, ''));
+                        if (!isNaN(num)) {
+                          // Check if string indicates millions/billions or is raw dollars
+                          if (amountStr.includes('billion') || amountStr.includes('b')) {
+                            dealAmount = this.formatCurrencyWithCommas(num * 1000, true); // Convert billions to millions
+                          } else if (amountStr.includes('million') || amountStr.includes('m')) {
+                            dealAmount = this.formatCurrencyWithCommas(num, true);
+                          } else if (num > 1000) {
+                            // Large number without unit - assume raw dollars, convert to millions
+                            dealAmount = this.formatCurrencyWithCommas(num / 1000000, true);
+                          } else {
+                            // Small number without unit - assume already in millions
+                            dealAmount = this.formatCurrencyWithCommas(num, true);
+                          }
+                        } else {
+                          dealAmount = String(amount);
+                        }
+                      } else {
+                        dealAmount = String(amount);
+                      }
+                    }
+                  }
+                  return `
+                    <tr>
+                      <td><strong>${this.escape(d.company || d.startup_name)}</strong></td>
+                      <td>${this.escape(d.series || d.round || 'N/A')}</td>
+                      <td>${dealAmount}</td>
+                      <td class="investors-cell">${(d.investors || d.vc_firms || []).slice(0, 2).map(v => this.escape(v)).join(', ')}${(d.investors || d.vc_firms || []).length > 2 ? '...' : ''}</td>
+                    </tr>
+                  `;
+                }).join('')}
               </tbody>
             </table>
           ` : '<p>No comparable deals found.</p>'}
@@ -736,7 +1200,7 @@ class AssessmentView {
               ${fundingSourceList.map(s => `
                 <li>
                   <strong>${this.escape(s.label)}</strong>: 
-                  <a href="${this.escape(s.url)}" target="_blank" rel="noopener">${this.truncateUrl(s.url)}</a>
+                  <a href="${this.escape(this.cleanSourceUrl(s.url))}" target="_blank" rel="noopener">${this.truncateUrl(s.url)}</a>
                 </li>
               `).join('')}
             </ul>
@@ -749,7 +1213,7 @@ class AssessmentView {
               ${dealSourceList.map(s => `
                 <li>
                   <strong>${this.escape(s.label)}</strong>: 
-                  <a href="${this.escape(s.url)}" target="_blank" rel="noopener">${this.truncateUrl(s.url)}</a>
+                  <a href="${this.escape(this.cleanSourceUrl(s.url))}" target="_blank" rel="noopener">${this.truncateUrl(s.url)}</a>
                 </li>
               `).join('')}
             </ul>
@@ -913,7 +1377,7 @@ class AssessmentView {
           ${sources.length > 0 ? `
             <ul class="source-list">
               ${sources.map(s => {
-                const cleanUrl = s.replace(/\[\^[\d.]+\]/g, '');
+                const cleanUrl = this.cleanSourceUrl(s);
                 return `<li><a href="${this.escape(cleanUrl)}" target="_blank" rel="noopener">${this.truncateUrl(cleanUrl)}</a></li>`;
               }).join('')}
             </ul>
@@ -1125,7 +1589,7 @@ class AssessmentView {
               ${marketSources.map(s => `
                 <li>
                   <strong>${this.escape(s.label)}</strong>: 
-                  <a href="${this.escape(s.url)}" target="_blank" rel="noopener">${this.truncateUrl(s.url)}</a>
+                  <a href="${this.escape(this.cleanSourceUrl(s.url))}" target="_blank" rel="noopener">${this.truncateUrl(s.url)}</a>
                 </li>
               `).join('')}
             </ul>
@@ -1297,7 +1761,7 @@ class AssessmentView {
               <tbody>
                 ${relevantPatents.map(p => `
                   <tr>
-                    <td>${p.link ? `<a href="${this.escape(p.link)}" target="_blank" rel="noopener">${this.escape(p.id || p.patentID)}</a>` : this.escape(p.id || p.patentID)}</td>
+                    <td>${p.link ? `<a href="${this.escape(this.cleanSourceUrl(p.link))}" target="_blank" rel="noopener">${this.escape(p.id || p.patentID)}</a>` : this.escape(p.id || p.patentID)}</td>
                     <td>${this.escape(this.truncate(p.title, 50))}</td>
                     <td>${this.escape(p.assignee)}</td>
                   </tr>
@@ -1331,7 +1795,7 @@ class AssessmentView {
               ${patentSources.map(p => `
                 <li>
                   <strong>${this.escape(p.id)}</strong>: 
-                  <a href="${this.escape(p.link)}" target="_blank" rel="noopener">Google Patents</a>
+                  <a href="${this.escape(this.cleanSourceUrl(p.link))}" target="_blank" rel="noopener">Google Patents</a>
                 </li>
               `).join('')}
             </ul>
@@ -1423,24 +1887,43 @@ class AssessmentView {
     return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
   }
 
+  /**
+   * Clean source URLs by removing citation reference suffixes like [%5E26563.0.0] or [^26563.0.0]
+   * These appear at the end of some source URLs from the API
+   * @param {string} url - The URL to clean
+   * @returns {string} - Cleaned URL
+   */
+  cleanSourceUrl(url) {
+    if (!url) return '';
+    // Remove patterns like [%5E26563.0.0] or [^26563.0.0] or __[%5E8551.0.0]__ from end of URL
+    // %5E is URL-encoded ^
+    return String(url)
+      .replace(/_*\[%5E[\d.]+\]_*$/i, '')
+      .replace(/_*\[\^[\d.]+\]_*$/i, '')
+      .replace(/\[%5E[\d.]+\]$/i, '')
+      .replace(/\[\^[\d.]+\]$/i, '');
+  }
+
   displayUrl(url) {
     if (!url) return '';
+    const cleanUrl = this.cleanSourceUrl(url);
     try {
-      const parsed = new URL(url);
+      const parsed = new URL(cleanUrl);
       return parsed.hostname.replace('www.', '');
     } catch {
-      return url;
+      return cleanUrl;
     }
   }
 
   truncateUrl(url) {
     if (!url) return '';
+    const cleanUrl = this.cleanSourceUrl(url);
     try {
-      const parsed = new URL(url);
+      const parsed = new URL(cleanUrl);
       const path = parsed.pathname.length > 30 ? parsed.pathname.slice(0, 30) + '...' : parsed.pathname;
       return parsed.hostname.replace('www.', '') + path;
     } catch {
-      return url.length > 50 ? url.slice(0, 50) + '...' : url;
+      return cleanUrl.length > 50 ? cleanUrl.slice(0, 50) + '...' : cleanUrl;
     }
   }
 
@@ -1471,6 +1954,92 @@ class AssessmentView {
     if (num >= 1e6) return '$' + (num / 1e6).toFixed(1) + 'M';
     if (num >= 1e3) return '$' + (num / 1e3).toFixed(0) + 'K';
     return '$' + num.toFixed(0);
+  }
+
+  formatCurrencyWithCommas(valueInMillions, includeDecimals = true) {
+    if (!valueInMillions && valueInMillions !== 0) return '-';
+    const num = typeof valueInMillions === 'number' ? valueInMillions : parseFloat(valueInMillions);
+    if (isNaN(num)) return String(valueInMillions);
+    
+    // If it's less than 1 million dollars (value < 1 when expressed in millions)
+    // Display as actual dollar amount with commas
+    if (num < 1 && num > 0) {
+      const dollars = Math.round(num * 1000000);
+      return '$' + dollars.toLocaleString('en-US');
+    }
+    
+    // For values >= 1000 million (i.e., >= 1 billion)
+    if (num >= 1000) {
+      // Billions - remove trailing .0 if whole number
+      const billionValue = num / 1000;
+      if (billionValue % 1 === 0) {
+        return '$' + billionValue.toFixed(0) + 'B';
+      }
+      return '$' + billionValue.toFixed(1) + 'B';
+    } else if (num >= 1) {
+      // Millions - remove trailing .0 if whole number
+      if (num % 1 === 0) {
+        return '$' + num.toFixed(0) + 'M';
+      }
+      const formatted = includeDecimals ? num.toFixed(1) : num.toFixed(0);
+      return '$' + formatted + 'M';
+    } else if (num === 0) {
+      return '$0';
+    }
+    
+    // Fallback for any edge cases
+    return '$' + num.toFixed(1) + 'M';
+  }
+
+  /**
+   * Parse a funding amount from various formats and return value in millions
+   * Handles: numbers (assumed millions), strings like "$10M", "10 million", "1.5B", "$1,500,000"
+   * @param {number|string} amount - The amount to parse
+   * @returns {number|null} - Amount in millions, or null if unparseable
+   */
+  parseFundingAmount(amount) {
+    if (amount === null || amount === undefined || amount === '' || 
+        amount === 'undisclosed' || amount === 'Undisclosed' || amount === 'Unknown') {
+      return null;
+    }
+    
+    // If it's already a number, assume it's in millions (API convention)
+    if (typeof amount === 'number') {
+      return amount;
+    }
+    
+    const amountStr = String(amount).toLowerCase().trim();
+    
+    // Extract numeric value
+    const numMatch = amountStr.match(/[\d,.]+/);
+    if (!numMatch) return null;
+    
+    const num = parseFloat(numMatch[0].replace(/,/g, ''));
+    if (isNaN(num)) return null;
+    
+    // Determine the unit and convert to millions
+    if (amountStr.includes('billion') || amountStr.includes('bn') || 
+        (amountStr.includes('b') && !amountStr.includes('m'))) {
+      return num * 1000; // Convert billions to millions
+    } else if (amountStr.includes('million') || amountStr.includes('mn') || amountStr.includes('m')) {
+      return num; // Already in millions
+    } else if (amountStr.includes('thousand') || amountStr.includes('k')) {
+      return num / 1000; // Convert thousands to millions
+    } else if (num >= 1000000) {
+      // Large number without unit - assume raw dollars
+      return num / 1000000;
+    } else if (num >= 1000) {
+      // Could be thousands of dollars or raw millions - context dependent
+      // If it has $ sign and is over 1000, likely raw dollars in thousands format
+      if (amountStr.includes('$')) {
+        return num / 1000000; // Treat as raw dollars
+      }
+      // Otherwise assume it's already in millions (API data)
+      return num;
+    } else {
+      // Small number - assume already in millions
+      return num;
+    }
   }
 
   formatIntensity(value) {

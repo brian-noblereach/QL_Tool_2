@@ -68,7 +68,15 @@ class TabManager {
    * @param {string} tabId - Tab identifier
    */
   handleTabClick(tabId) {
-    if (this.tabs[tabId] !== TabState.READY) {
+    const state = this.tabs[tabId];
+    
+    // If error state, trigger retry instead of activating
+    if (state === TabState.ERROR) {
+      this.handleRetryClick(tabId);
+      return;
+    }
+    
+    if (state !== TabState.READY) {
       return; // Only allow clicking ready tabs
     }
     
@@ -261,8 +269,8 @@ class TabManager {
     const state = this.tabs[tabId];
     const statusEl = btn.querySelector('.tab-status');
     
-    // Update disabled state
-    btn.disabled = state !== TabState.READY;
+    // Update disabled state - error tabs should still be clickable for retry
+    btn.disabled = state !== TabState.READY && state !== TabState.ERROR;
     
     // Update status indicator with appropriate icon
     if (statusEl) {
@@ -289,6 +297,63 @@ class TabManager {
     // Add/remove CSS classes
     btn.classList.remove('pending', 'loading', 'ready', 'error');
     btn.classList.add(state);
+    
+    // Add or remove retry overlay for error state
+    this.updateRetryOverlay(tabId, state);
+  }
+
+  /**
+   * Add or remove retry overlay on tab button
+   * @param {string} tabId - Tab identifier
+   * @param {string} state - Tab state
+   */
+  updateRetryOverlay(tabId, state) {
+    const btn = this.tabButtons[tabId];
+    if (!btn) return;
+    
+    // Remove existing overlay
+    const existingOverlay = btn.querySelector('.tab-retry-overlay');
+    if (existingOverlay) {
+      existingOverlay.remove();
+    }
+    
+    // Add overlay for error state
+    if (state === TabState.ERROR) {
+      const overlay = document.createElement('div');
+      overlay.className = 'tab-retry-overlay';
+      overlay.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="1 4 1 10 7 10"/>
+          <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+        </svg>
+        Retry
+      `;
+      
+      // Add click handler to retry overlay
+      overlay.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.handleRetryClick(tabId);
+      });
+      
+      btn.appendChild(overlay);
+    }
+  }
+
+  /**
+   * Handle retry click on error tab
+   * @param {string} tabId - Tab identifier
+   */
+  handleRetryClick(tabId) {
+    // Map tab ID back to phase name
+    const phase = tabId === 'overview' ? 'company' : tabId;
+    
+    // Notify listeners about retry request
+    this.notifyListeners('retryRequested', { tabId, phase });
+    
+    // Call app's retry method if available
+    if (window.app && typeof window.app.retryFromTab === 'function') {
+      window.app.retryFromTab(phase);
+    }
   }
 
   /**

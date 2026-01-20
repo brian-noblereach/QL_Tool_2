@@ -93,6 +93,12 @@ class App {
       cancelBtn.addEventListener('click', () => this.cancelAnalysis());
     }
     
+    // Load Previous button
+    const loadPreviousBtn = document.getElementById('load-previous-btn');
+    if (loadPreviousBtn) {
+      loadPreviousBtn.addEventListener('click', () => this.loadPreviousAssessment());
+    }
+    
     // File upload handling
     this.setupFileUploadListeners();
   }
@@ -362,7 +368,13 @@ class App {
     }
     
     // Save input to state
-    this.stateManager.setCompanyInput(validatedUrl || 'Document Upload', scaName);
+    this.stateManager.setCompanyInput(validatedUrl || 'Document Upload', scaName, hasFile ? file.name : null);
+    
+    // Clear Smartsheet row ID for new analysis (unless we're re-running a loaded assessment)
+    // The row ID will be set if we're updating an existing assessment
+    if (!this.stateManager.getSmartsheetRowId()) {
+      window.SmartsheetIntegration?.clearCurrentRowId();
+    }
     
     // Request notification permission
     await this.requestNotificationPermission();
@@ -544,6 +556,9 @@ class App {
     // Mark state as complete
     this.stateManager.markComplete();
     
+    // Cache the full assessment for later reload
+    this.cacheCurrentAssessment(results);
+    
     // Enable export button
     const exportBtn = document.getElementById('export-btn');
     if (exportBtn) exportBtn.disabled = false;
@@ -565,6 +580,31 @@ class App {
     
     // Toast
     this.toastManager.success('All analyses complete! You can now export the report.');
+  }
+
+  /**
+   * Cache the current assessment to localStorage for later reload
+   * @param {Object} results - Full analysis results
+   */
+  cacheCurrentAssessment(results) {
+    try {
+      const companyFull = results.company?.full || results.company;
+      const ventureName = companyFull?.company_overview?.name || 'Unknown';
+      
+      this.stateManager.cacheFullAssessment({
+        company: companyFull,
+        team: results.team,
+        funding: results.funding,
+        competitive: results.competitive,
+        market: results.market,
+        iprisk: results.iprisk,
+        ventureName: ventureName
+      });
+      
+      console.log('[App] Assessment cached for:', ventureName);
+    } catch (error) {
+      console.error('[App] Failed to cache assessment:', error);
+    }
   }
 
   handleAnalysisError(error) {
@@ -591,15 +631,11 @@ class App {
     const exportBtn = document.getElementById('export-btn');
     if (exportBtn) exportBtn.disabled = false;
     
-    // Hide progress section
+    // Hide main progress section
     this.progressView.hide();
     
-    // Update compact progress to show completion (with failures)
-    const compactProgress = document.getElementById('compact-progress');
-    if (compactProgress) {
-      document.getElementById('compact-progress-text').textContent = 
-        `${successCount} of ${successCount + failedCount} complete (${failedCount} failed)`;
-    }
+    // Update compact progress to show partial completion with warning state
+    this.progressView.showCompactPartialComplete(successCount, failedCount);
     
     // Show warning toast
     this.toastManager.warning(
@@ -629,6 +665,9 @@ class App {
     this.pipeline.reset();
     this.progressView.reset();
     this.tabManager.reset();
+    
+    // Clear Smartsheet row ID
+    window.SmartsheetIntegration?.clearCurrentRowId();
     
     // Clear inputs
     const urlInput = document.getElementById('company-url');
@@ -809,6 +848,294 @@ class App {
       console.error('Failed to submit scores to Smartsheet:', error);
       // Don't fail the export if Smartsheet submission fails
     }
+  }
+
+  /**
+   * Show final submit confirmation modal when all scores are entered
+   * Called by AssessmentView when all 5 dimension scores are submitted
+   * @param {Object} data - Score data and metadata
+   */
+  async showFinalSubmitModal(data) {
+    const { scores, missingJustifications, avgAiScore, avgUserScore } = data;
+    
+    try {
+      const action = await this.modalManager.showFinalSubmitModal(data);
+      
+      switch (action) {
+        case 'submit':
+          // Submit all scores to Smartsheet
+          await this.submitFinalScores();
+          this.toastManager.success('Final scores submitted to database');
+          break;
+          
+        case 'addJustifications':
+          // Navigate to the first dimension missing a justification
+          if (missingJustifications && missingJustifications.length > 0) {
+            const firstMissing = missingJustifications[0];
+            this.tabManager.activateTab(firstMissing);
+            // Focus the justification textarea
+            setTimeout(() => {
+              const textarea = document.getElementById(`${firstMissing}-justification`);
+              if (textarea) textarea.focus();
+            }, 100);
+            this.toastManager.info(`Add justification for ${this.capitalize(firstMissing)} analysis`);
+          }
+          break;
+          
+        case 'cancel':
+        default:
+          // Do nothing, user can continue editing
+          break;
+      }
+    } catch (error) {
+      console.error('Error showing final submit modal:', error);
+    }
+  }
+
+  /**
+   * Submit final averaged scores to Smartsheet
+   */
+  async submitFinalScores() {
+    try {
+      await this.submitAllScoresToSmartsheet();
+      
+      // Enable export button if not already enabled
+      const exportBtn = document.getElementById('export-btn');
+      if (exportBtn) exportBtn.disabled = false;
+      
+    } catch (error) {
+      console.error('Error submitting final scores:', error);
+      this.toastManager.error('Failed to submit scores. Please try exporting the report.');
+    }
+  }
+
+  /**
+   * Retry a failed phase from the tab panel
+   * @param {string} phase - Phase key to retry
+   */
+  async retryFromTab(phase) {
+    try {
+      await this.retryPhase(phase);
+    } catch (error) {
+      console.error('Retry from tab failed:', error);
+      this.toastManager.error(`Retry failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Capitalize first letter of string
+   */
+  capitalize(str) {
+    if (!str) return '';
+    return str.charAt(0).toUpperCase() + str.slice(1);
+  }
+
+  /**
+   * Load a previous assessment from cache
+   * Shows a modal with list of cached assessments
+   */
+  async loadPreviousAssessment() {
+    try {
+      // Get list of cached assessments
+      const assessments = this.stateManager.listPastAssessments();
+      
+      // Show modal for selection
+      const selected = await this.modalManager.showLoadPreviousModal(assessments);
+      
+      if (!selected) {
+        // User cancelled
+        return;
+      }
+      
+      // Load the selected assessment
+      const assessment = this.stateManager.loadAssessment(selected.key);
+      
+      if (!assessment) {
+        this.toastManager.error('Could not load assessment data');
+        return;
+      }
+      
+      // Check if we have full data or just scores
+      const hasFullData = assessment.aiData && 
+        Object.values(assessment.aiData).some(v => v !== null);
+      
+      if (hasFullData) {
+        // Restore full assessment
+        await this.restoreFromCachedAssessment(assessment);
+        this.toastManager.success(`Loaded assessment for ${selected.ventureName}`);
+      } else {
+        // Show notification that we only have scores
+        const action = await this.modalManager.showScoresOnlyLoadedModal(selected.ventureName);
+        
+        if (action === 'rerun') {
+          // Pre-fill URL and start new analysis
+          const urlInput = document.getElementById('company-url');
+          const scaInput = document.getElementById('sca-name');
+          
+          if (urlInput && assessment.companyInput?.url) {
+            urlInput.value = assessment.companyInput.url;
+          }
+          if (scaInput && assessment.advisorName) {
+            scaInput.value = assessment.advisorName;
+          }
+          
+          // Store the row ID so we update the same row
+          if (assessment.smartsheetRowId) {
+            this.stateManager.saveSmartsheetRowId(assessment.smartsheetRowId);
+            window.SmartsheetIntegration?.setCurrentRowId(assessment.smartsheetRowId);
+          }
+          
+          this.toastManager.info('Ready to re-run analysis. Click "Start Assessment" when ready.');
+        } else {
+          // Just load scores for editing
+          await this.restoreScoresOnly(assessment);
+          this.toastManager.info(`Scores loaded for ${selected.ventureName}`);
+        }
+      }
+      
+    } catch (error) {
+      console.error('[App] Error loading previous assessment:', error);
+      this.toastManager.error('Failed to load assessment');
+    }
+  }
+
+  /**
+   * Restore a full cached assessment (with AI data)
+   * @param {Object} assessment - Cached assessment data
+   */
+  async restoreFromCachedAssessment(assessment) {
+    try {
+      // Reset current state
+      this.pipeline.reset();
+      this.tabManager.reset();
+      
+      // Restore Smartsheet row ID if present
+      if (assessment.smartsheetRowId) {
+        this.stateManager.saveSmartsheetRowId(assessment.smartsheetRowId);
+        window.SmartsheetIntegration?.setCurrentRowId(assessment.smartsheetRowId);
+      }
+      
+      // Pre-fill URL input
+      const urlInput = document.getElementById('company-url');
+      const scaInput = document.getElementById('sca-name');
+      
+      if (urlInput && assessment.companyInput?.url && assessment.companyInput.url !== 'Document Upload') {
+        urlInput.value = assessment.companyInput.url;
+      }
+      if (scaInput && assessment.advisorName) {
+        scaInput.value = assessment.advisorName;
+      }
+      
+      // Show results section
+      this.showSection('results');
+      
+      // Load company data if available
+      if (assessment.aiData.company) {
+        this.tabManager.enableTab('overview');
+        this.assessmentView.loadCompanyData(assessment.aiData.company);
+      }
+      
+      // Load each dimension
+      const dimensions = ['team', 'funding', 'competitive', 'market', 'iprisk'];
+      
+      dimensions.forEach(dim => {
+        if (assessment.aiData[dim]) {
+          this.tabManager.enableTab(dim);
+          this.loadPhaseData(dim, assessment.aiData[dim]);
+        }
+      });
+      
+      // Restore user scores
+      if (assessment.userScores) {
+        Object.entries(assessment.userScores).forEach(([dim, scoreData]) => {
+          if (scoreData) {
+            this.assessmentView.setUserScore(dim, scoreData);
+            
+            // Mark as submitted if it was
+            if (scoreData.score !== null) {
+              this.assessmentView.userScores[dim].submitted = true;
+              this.assessmentView.userScores[dim].timesSubmitted = 1;
+              
+              // Update submit button state
+              const submitBtn = document.getElementById(`${dim}-submit-btn`);
+              const scoringCard = document.getElementById(`${dim}-scoring-card`);
+              
+              if (submitBtn) {
+                submitBtn.classList.add('update-mode');
+                submitBtn.innerHTML = `
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                  </svg>
+                  Update Score
+                `;
+              }
+              
+              if (scoringCard) {
+                scoringCard.classList.add('has-submission');
+              }
+            }
+          }
+        });
+      }
+      
+      // Check if summary tab should be enabled
+      if (this.tabManager.allReady()) {
+        this.tabManager.enableTab('summary');
+        
+        // Update summary view
+        this.summaryView.update({
+          company: assessment.aiData.company,
+          team: assessment.aiData.team,
+          funding: assessment.aiData.funding,
+          competitive: assessment.aiData.competitive,
+          market: assessment.aiData.market,
+          iprisk: assessment.aiData.iprisk
+        });
+      }
+      
+      // Activate first tab
+      this.tabManager.activateTab('overview');
+      
+      // Enable export button
+      const exportBtn = document.getElementById('export-btn');
+      if (exportBtn) exportBtn.disabled = false;
+      
+      this.state = 'results';
+      
+    } catch (error) {
+      console.error('[App] Error restoring cached assessment:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Restore only scores (no AI data) - limited functionality
+   * @param {Object} assessment - Cached assessment with user scores only
+   */
+  async restoreScoresOnly(assessment) {
+    // This is a partial restore - we don't have AI data
+    // User can view/edit scores but won't see AI evidence
+    
+    // Pre-fill URL input
+    const urlInput = document.getElementById('company-url');
+    const scaInput = document.getElementById('sca-name');
+    
+    if (urlInput && assessment.companyInput?.url && assessment.companyInput.url !== 'Document Upload') {
+      urlInput.value = assessment.companyInput.url;
+    }
+    if (scaInput && assessment.advisorName) {
+      scaInput.value = assessment.advisorName;
+    }
+    
+    // Store the row ID for updates
+    if (assessment.smartsheetRowId) {
+      this.stateManager.saveSmartsheetRowId(assessment.smartsheetRowId);
+      window.SmartsheetIntegration?.setCurrentRowId(assessment.smartsheetRowId);
+    }
+    
+    // Note: Don't switch to results view since we don't have AI data to display
+    // User needs to re-run analysis or just update scores via Smartsheet
   }
 }
 

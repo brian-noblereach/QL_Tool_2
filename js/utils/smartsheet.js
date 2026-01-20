@@ -1,6 +1,7 @@
 // js/utils/smartsheet.js - Smartsheet Integration for Venture Assessment Platform V02
 // Submits scores to Smartsheet via Google Apps Script proxy
 // Uses iframe form submission to avoid CORS issues
+// Supports row updates (not just creation) and fetching past assessments
 
 const SmartsheetIntegration = {
   // Google Apps Script Web App URL (same as StackProxy)
@@ -9,7 +10,8 @@ const SmartsheetIntegration = {
   // Track submission state
   state: {
     lastSubmission: null,
-    isSubmitting: false
+    isSubmitting: false,
+    currentRowId: null
   },
 
   /**
@@ -27,10 +29,18 @@ const SmartsheetIntegration = {
     try {
       const payload = this.buildPayload(metric, scoreData, context);
       
-      console.log(`Submitting ${metric} score to Smartsheet:`, payload);
+      // Check if we should update an existing row
+      const rowId = this.getCurrentRowId();
+      const isUpdate = !!rowId;
+      
+      if (isUpdate) {
+        payload.rowId = rowId;
+      }
+      
+      console.log(`${isUpdate ? 'Updating' : 'Submitting'} ${metric} score to Smartsheet:`, payload);
 
       const requestData = {
-        action: 'smartsheet',
+        action: isUpdate ? 'smartsheet_update' : 'smartsheet',
         ...payload
       };
 
@@ -38,14 +48,19 @@ const SmartsheetIntegration = {
       const result = await this.submitViaIframe(requestData);
 
       if (result.success) {
+        // Store row ID if this was a new submission
+        if (result.rowId && !isUpdate) {
+          this.setCurrentRowId(result.rowId);
+        }
+        
         this.state.lastSubmission = {
           metric,
           timestamp: new Date().toISOString(),
-          rowId: result.rowId,
-          action: result.action
+          rowId: result.rowId || rowId,
+          action: isUpdate ? 'update' : 'create'
         };
         
-        this.showToast(`${this.formatMetricName(metric)} score saved to database`, 'success');
+        this.showToast(`${this.formatMetricName(metric)} score ${isUpdate ? 'updated' : 'saved'} to database`, 'success');
         return result;
       } else {
         throw new Error(result.error || 'Submission failed');
@@ -73,17 +88,30 @@ const SmartsheetIntegration = {
     try {
       const payload = this.buildFullPayload(allData, context);
       
-      console.log('Submitting all scores to Smartsheet:', payload);
+      // Check if we should update an existing row
+      const rowId = this.getCurrentRowId();
+      const isUpdate = !!rowId;
+      
+      if (isUpdate) {
+        payload.rowId = rowId;
+      }
+      
+      console.log(`${isUpdate ? 'Updating' : 'Submitting'} all scores to Smartsheet:`, payload);
 
       const requestData = {
-        action: 'smartsheet',
+        action: isUpdate ? 'smartsheet_update' : 'smartsheet',
         ...payload
       };
 
       const result = await this.submitViaIframe(requestData);
 
       if (result.success) {
-        this.showToast('All scores saved to database', 'success');
+        // Store row ID if this was a new submission
+        if (result.rowId && !isUpdate) {
+          this.setCurrentRowId(result.rowId);
+        }
+        
+        this.showToast(`All scores ${isUpdate ? 'updated' : 'saved'} to database`, 'success');
         return result;
       } else {
         throw new Error(result.error || 'Submission failed');
@@ -95,6 +123,64 @@ const SmartsheetIntegration = {
       return { success: false, error: error.message };
     } finally {
       this.state.isSubmitting = false;
+    }
+  },
+
+  /**
+   * Fetch past assessments from Smartsheet for the current advisor
+   * @param {string} advisorName - Optional filter by advisor name
+   * @returns {Promise<Array>} List of past assessments
+   */
+  async fetchPastAssessments(advisorName = null) {
+    try {
+      const params = {
+        action: 'smartsheet_list'
+      };
+      
+      if (advisorName) {
+        params.advisorName = advisorName;
+      }
+
+      console.log('Fetching past assessments from Smartsheet...');
+      
+      const result = await this.submitViaIframe(params);
+      
+      if (result.success && result.assessments) {
+        console.log(`Found ${result.assessments.length} past assessments`);
+        return result.assessments;
+      }
+      
+      return [];
+    } catch (error) {
+      console.error('Error fetching past assessments:', error);
+      return [];
+    }
+  },
+
+  /**
+   * Load scores from a specific Smartsheet row
+   * @param {string} rowId - Smartsheet row ID
+   * @returns {Promise<Object|null>} Assessment scores or null
+   */
+  async loadFromSmartsheet(rowId) {
+    try {
+      const params = {
+        action: 'smartsheet_get',
+        rowId: rowId
+      };
+
+      console.log('Loading assessment from Smartsheet:', rowId);
+      
+      const result = await this.submitViaIframe(params);
+      
+      if (result.success && result.data) {
+        return result.data;
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Error loading from Smartsheet:', error);
+      return null;
     }
   },
 
@@ -184,6 +270,38 @@ const SmartsheetIntegration = {
       // Resolve after short delay regardless
       setTimeout(() => resolve({ success: true, message: 'Submitted' }), 2000);
     });
+  },
+
+  /**
+   * Get current row ID from state manager
+   */
+  getCurrentRowId() {
+    if (this.state.currentRowId) {
+      return this.state.currentRowId;
+    }
+    if (window.app?.stateManager) {
+      return window.app.stateManager.getSmartsheetRowId();
+    }
+    return null;
+  },
+
+  /**
+   * Set current row ID (store in both local state and state manager)
+   */
+  setCurrentRowId(rowId) {
+    this.state.currentRowId = rowId;
+    if (window.app?.stateManager) {
+      window.app.stateManager.saveSmartsheetRowId(rowId);
+    }
+    console.log('[Smartsheet] Row ID set:', rowId);
+  },
+
+  /**
+   * Clear current row ID (for new assessments)
+   */
+  clearCurrentRowId() {
+    this.state.currentRowId = null;
+    console.log('[Smartsheet] Row ID cleared');
   },
 
   /**

@@ -472,6 +472,10 @@ body {
   transition: width 0.5s ease;
 }
 
+.progress-fill.warning {
+  background: linear-gradient(90deg, var(--brand-warning), #f5c842);
+}
+
 .progress-stats {
   display: flex;
   justify-content: space-between;
@@ -482,6 +486,15 @@ body {
 #progress-percentage {
   font-weight: 600;
   color: var(--nr-teal-1);
+}
+
+#progress-percentage.warning {
+  color: var(--brand-warning);
+}
+
+#progress-time.warning {
+  color: var(--brand-warning);
+  font-weight: 600;
 }
 
 .phase-list {
@@ -626,9 +639,26 @@ body {
   transition: width 0.5s ease;
 }
 
+.compact-progress-fill.warning {
+  background: var(--brand-warning);
+}
+
 #compact-progress-time {
   font-size: 13px;
   opacity: 0.8;
+}
+
+/* Compact Progress - Partial Complete State */
+.compact-progress.partial-complete {
+  background: linear-gradient(90deg, var(--nr-navy-1), #4a3f1a);
+}
+
+.compact-progress.partial-complete .compact-progress-icon {
+  color: var(--brand-warning);
+}
+
+.compact-progress.partial-complete #compact-progress-text {
+  color: var(--brand-warning);
 }
 
 /* Tab Navigation */
@@ -1877,6 +1907,243 @@ body {
 .funding-amount { font-weight: 600; color: var(--nr-teal-1); font-size: 13px; }
 .more-link, .more-note { font-size: 12px; color: var(--nr-teal-1); margin-top: 8px; }
 
+/* VC Activity Summary */
+.vc-activity-summary { 
+  display: grid; 
+  grid-template-columns: 1fr 1fr; 
+  gap: 12px; 
+  margin-bottom: 16px; 
+  padding: 12px; 
+  background: var(--slate-50); 
+  border-radius: var(--radius-sm); 
+}
+.vc-stat { display: flex; flex-direction: column; gap: 4px; }
+.vc-stat-label { font-size: 11px; color: var(--slate-500); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+.vc-stat-value { font-size: 18px; font-weight: 700; color: var(--nr-navy-1); }
+
+/* Industry Context */
+.industry-context {
+  font-size: 12px;
+  color: var(--slate-600);
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background: var(--slate-50);
+  border-left: 3px solid var(--nr-teal-1);
+  border-radius: var(--radius-sm);
+}
+.industry-context strong {
+  color: var(--nr-navy-1);
+}
+
+/* Recent Deals List */
+.recent-deals-list { margin-top: 12px; }
+.recent-deals-list strong { display: block; font-size: 13px; color: var(--slate-700); margin-bottom: 10px; }
+.market-deal-item { 
+  display: grid; 
+  grid-template-columns: 1fr auto auto; 
+  gap: 12px; 
+  padding: 8px 12px; 
+  background: white; 
+  border: 1px solid var(--slate-200); 
+  border-radius: var(--radius-sm); 
+  margin-bottom: 6px; 
+  align-items: center; 
+}
+.deal-company { font-size: 13px; font-weight: 600; color: var(--nr-navy-1); }
+.deal-series { 
+  font-size: 11px; 
+  padding: 3px 8px; 
+  background: var(--slate-100); 
+  color: var(--slate-600); 
+  border-radius: var(--radius-sm); 
+  white-space: nowrap; 
+}
+.deal-amount { font-size: 13px; font-weight: 700; color: var(--nr-teal-1); white-space: nowrap; }
+
+/* No data message */
+.no-data-message { 
+  font-size: 13px; 
+  color: var(--slate-500); 
+  font-style: italic; 
+  padding: 16px; 
+  text-align: center; 
+  background: var(--slate-50); 
+  border-radius: var(--radius-sm); 
+}
+
+/* ---------- Funding Timeline Visualization ---------- */
+.funding-timeline-visual {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 16px;
+  margin-top: 16px;
+  padding: 20px;
+  background: var(--slate-50);
+  border-radius: var(--radius);
+}
+
+.timeline-year {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.timeline-year-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--slate-700);
+}
+
+.timeline-bars {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  height: 120px;
+  width: 100%;
+  justify-content: center;
+}
+
+.timeline-bar {
+  width: 32px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  position: relative;
+}
+
+.timeline-bar-fill {
+  width: 100%;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 4px;
+  transition: all 0.3s ease;
+  min-height: 24px;
+}
+
+.timeline-bar.venture-bar .timeline-bar-fill {
+  background: var(--nr-teal-1);
+}
+
+.timeline-bar.market-bar .timeline-bar-fill {
+  background: var(--nr-purple-1);
+}
+
+.timeline-bar-count {
+  font-size: 11px;
+  font-weight: 700;
+  color: white;
+}
+
+.timeline-bar-empty {
+  width: 100%;
+  height: 4px;
+  background: var(--slate-200);
+  border-radius: var(--radius-sm);
+}
+
+.timeline-year-details {
+  display: none;
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: 8px;
+  background: white;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius);
+  padding: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  z-index: 10;
+  min-width: 200px;
+  max-width: 280px;
+}
+
+.timeline-year.has-activity {
+  position: relative;
+}
+
+.timeline-year.has-activity:hover .timeline-year-details {
+  display: block;
+}
+
+.timeline-year.has-activity:hover .timeline-bar-fill {
+  opacity: 0.8;
+}
+
+.timeline-detail {
+  margin-bottom: 8px;
+  font-size: 11px;
+}
+
+.timeline-detail:last-child {
+  margin-bottom: 0;
+}
+
+.timeline-detail strong {
+  display: block;
+  font-size: 11px;
+  color: var(--nr-navy-1);
+  margin-bottom: 4px;
+}
+
+.timeline-detail.venture-detail strong {
+  color: var(--nr-teal-1);
+}
+
+.timeline-detail.market-detail strong {
+  color: var(--nr-purple-1);
+}
+
+.timeline-item {
+  font-size: 10px;
+  color: var(--slate-600);
+  padding: 2px 0;
+  line-height: 1.3;
+}
+
+.timeline-more {
+  font-size: 10px;
+  color: var(--slate-400);
+  font-style: italic;
+  margin-top: 4px;
+}
+
+.timeline-legend {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+  margin-top: 16px;
+  padding: 12px;
+  background: white;
+  border-radius: var(--radius-sm);
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--slate-700);
+}
+
+.legend-color {
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-sm);
+}
+
+.legend-color.venture-color {
+  background: var(--nr-teal-1);
+}
+
+.legend-color.market-color {
+  background: var(--nr-purple-1);
+}
+
 /* ---------- Competitor Grid ---------- */
 .competitor-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
 .competitor-card-detailed { background: var(--slate-50); border: 1px solid var(--slate-200); border-radius: var(--radius); padding: 14px; }
@@ -2082,4 +2349,326 @@ body {
 
 .file-upload-zone.error .file-upload-icon {
   color: var(--brand-error);
+}
+
+/* ========== PHASE 2 STYLES ========== */
+
+/* ---------- Tab Error State with Retry Button ---------- */
+.tab-btn.error {
+  position: relative;
+  background: rgba(220, 38, 38, 0.08);
+  border-bottom-color: var(--brand-error);
+}
+
+.tab-btn.error:disabled {
+  opacity: 1;
+  cursor: pointer;
+}
+
+.tab-btn.error .tab-icon {
+  color: var(--brand-error);
+}
+
+.tab-btn.error .tab-label {
+  color: var(--brand-error);
+}
+
+/* Retry overlay on error tabs */
+.tab-retry-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(220, 38, 38, 0.95);
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+  border-radius: 0;
+  cursor: pointer;
+  z-index: 5;
+}
+
+.tab-btn.error:hover .tab-retry-overlay {
+  opacity: 1;
+}
+
+.tab-retry-overlay svg {
+  width: 14px;
+  height: 14px;
+}
+
+.tab-retry-overlay:hover {
+  background: rgba(185, 28, 28, 0.98);
+}
+
+/* ---------- Scoring Card Submitted State ---------- */
+.scoring-card.has-submission {
+  border-color: var(--brand-success);
+  box-shadow: 0 0 0 1px var(--brand-success), var(--shadow);
+}
+
+.scoring-card.has-submission::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--brand-success);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+.scoring-card {
+  position: relative;
+}
+
+/* Submitted badge */
+.submission-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--brand-success);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 600;
+  margin-left: auto;
+}
+
+.submission-badge svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* Submit button states */
+.submit-btn.update-mode {
+  background: var(--nr-purple-2);
+}
+
+.submit-btn.update-mode:hover:not(:disabled) {
+  background: var(--nr-purple-1);
+}
+
+.submit-btn.submitted {
+  background: var(--brand-success);
+  pointer-events: none;
+}
+
+/* Scoring card header with submission status */
+.scoring-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.scoring-card-header h3 {
+  margin-bottom: 0;
+}
+
+/* ---------- Modal Warning for Missing Justifications ---------- */
+.modal-warning {
+  display: flex;
+  gap: 12px;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+
+.modal-warning .warning-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.modal-warning .warning-content {
+  flex: 1;
+}
+
+.modal-warning strong {
+  display: block;
+  color: var(--slate-700);
+  margin-bottom: 6px;
+  font-size: 14px;
+}
+
+.modal-warning .missing-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 8px 0;
+}
+
+.modal-warning .missing-list li {
+  font-size: 13px;
+  color: var(--slate-600);
+  padding: 3px 0;
+}
+
+.modal-warning .missing-list li::before {
+  content: "• ";
+  color: var(--brand-warning);
+}
+
+.modal-warning .warning-note {
+  font-size: 12px;
+  color: var(--slate-500);
+  margin: 0;
+  font-style: italic;
+}
+
+/* Modal success icon */
+.modal-icon.success {
+  color: var(--brand-success);
+}
+
+/* Score value in modal */
+.modal-info-value.score-value {
+  font-family: 'Clash Display', sans-serif;
+  font-size: 18px;
+  color: var(--nr-navy-1);
+}
+
+/* ---------- Scoring Card ID for targeting ---------- */
+#team-scoring-card,
+#funding-scoring-card,
+#competitive-scoring-card,
+#market-scoring-card,
+#iprisk-scoring-card {
+  position: relative;
+}
+
+/* ========== PHASE 3 STYLES - LOAD PREVIOUS ========== */
+
+/* ---------- Load Previous Button ---------- */
+.form-actions {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  padding-top: 8px;
+}
+
+#load-previous-btn {
+  background: transparent;
+  border-color: var(--slate-300);
+  color: var(--slate-600);
+}
+
+#load-previous-btn:hover:not(:disabled) {
+  background: var(--slate-50);
+  border-color: var(--slate-400);
+  color: var(--slate-700);
+}
+
+/* ---------- Load Previous Modal ---------- */
+.assessment-search-container {
+  margin-bottom: 16px;
+}
+
+.assessment-search {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid var(--slate-300);
+  border-radius: var(--radius);
+  font-size: 14px;
+  font-family: inherit;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.assessment-search:focus {
+  outline: none;
+  border-color: var(--nr-teal-1);
+  box-shadow: 0 0 0 3px rgba(0, 130, 165, 0.15);
+}
+
+.assessment-list {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius);
+  background: var(--slate-50);
+}
+
+.assessment-list-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--slate-200);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.assessment-list-item:last-child {
+  border-bottom: none;
+}
+
+.assessment-list-item:hover {
+  background: var(--slate-100);
+}
+
+.assessment-list-item.selected {
+  background: rgba(0, 130, 165, 0.1);
+  border-left: 3px solid var(--nr-teal-1);
+  padding-left: 13px;
+}
+
+.assessment-item-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.assessment-venture-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--nr-navy-1);
+}
+
+.assessment-date {
+  font-size: 12px;
+  color: var(--slate-500);
+}
+
+.assessment-item-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.assessment-advisor {
+  font-size: 12px;
+  color: var(--slate-500);
+}
+
+.assessment-badge {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.assessment-badge.full-data {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--brand-success);
+}
+
+.assessment-badge.scores-only {
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--brand-warning);
+}
+
+.no-assessments-message {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--slate-500);
+  font-size: 14px;
+  line-height: 1.6;
 }
