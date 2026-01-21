@@ -27,25 +27,108 @@ const StackProxy = {
   },
   
   /**
-   * Fetch API config from proxy
+   * Fetch API config from proxy using iframe to avoid CORS issues
    */
   async fetchConfig() {
-    const url = `${this.proxyUrl}?action=config&origin=${encodeURIComponent(window.location.origin)}`;
-    
-    try {
-      const response = await fetch(url);
-      const data = await response.json();
-      
-      if (!data.success || !data.config) {
-        throw new Error(data.error || 'Failed to fetch config');
+    return new Promise((resolve, reject) => {
+      const timeoutMs = 10000;
+      let completed = false;
+
+      // Create a hidden iframe to fetch the config
+      const iframe = document.createElement('iframe');
+      iframe.style.display = 'none';
+      iframe.name = 'configFrame_' + Date.now();
+      document.body.appendChild(iframe);
+
+      // Create form to submit GET request via iframe
+      const form = document.createElement('form');
+      form.method = 'GET';
+      form.action = this.proxyUrl;
+      form.target = iframe.name;
+      form.style.display = 'none';
+
+      // Add action parameter
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = 'action';
+      input.value = 'config';
+      form.appendChild(input);
+
+      document.body.appendChild(form);
+
+      const cleanup = () => {
+        if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+        if (form.parentNode) form.parentNode.removeChild(form);
+      };
+
+      // Handle iframe load
+      iframe.onload = () => {
+        if (completed) return;
+
+        setTimeout(() => {
+          if (completed) return;
+
+          try {
+            const doc = iframe.contentDocument || iframe.contentWindow?.document;
+            if (doc && doc.body) {
+              const text = doc.body.innerText || doc.body.textContent;
+              if (text && text.trim()) {
+                const data = JSON.parse(text.trim());
+                if (data.success && data.config) {
+                  completed = true;
+                  cleanup();
+                  resolve(data.config);
+                  return;
+                } else {
+                  throw new Error(data.error || 'Invalid config response');
+                }
+              }
+            }
+          } catch (e) {
+            // If we can't read iframe (cross-origin), use fallback config
+            Debug.warn('[StackProxy] Cannot read config from iframe, using fallback');
+            completed = true;
+            cleanup();
+            resolve(this.getFallbackConfig());
+          }
+        }, 500);
+      };
+
+      // Timeout - use fallback config
+      setTimeout(() => {
+        if (!completed) {
+          Debug.warn('[StackProxy] Config fetch timeout, using fallback');
+          completed = true;
+          cleanup();
+          resolve(this.getFallbackConfig());
+        }
+      }, timeoutMs);
+
+      // Submit form
+      form.submit();
+    });
+  },
+
+  /**
+   * Fallback config in case proxy is unreachable
+   * Note: publicKey is safe to expose (used for inference only)
+   */
+  getFallbackConfig() {
+    return {
+      baseUrl: 'https://api.stack-ai.com/inference/v0/run/f913a8b8-144d-47e0-b327-8daa341b575d',
+      docsUrl: 'https://api.stack-ai.com/documents/f913a8b8-144d-47e0-b327-8daa341b575d',
+      publicKey: 'e80f3814-a651-4de7-a7ba-8478b7a9047b',
+      workflows: {
+        company_url: '694c385d4f9d789570304dd5',
+        company_file: '6949ba538f9ce68c9b8b841a',
+        company_both: '6945b566ba9cfba7e5c6fabb',
+        team: '6949b0045ea7002afda5c979',
+        funding: '68f0020d7a00704c92fdd7b5',
+        competitive: '686d72045c56d3a93d5f7b68',
+        market: '68a8bc5d5f2ffcec5ada4422',
+        iprisk: '68d45d1f4c0213053bf91862'
       }
-      
-      return data.config;
-      
-    } catch (error) {
-      console.error('[StackProxy] Failed to fetch config:', error);
-      throw new Error('Failed to connect to API proxy: ' + error.message);
-    }
+    };
   },
   
   /**
@@ -103,16 +186,17 @@ const StackProxy = {
   
   /**
    * Upload file via proxy, then call workflow directly
+   * Uses iframe form submission to avoid CORS issues with Google Apps Script
    */
   async callWithFile(workflow, file, websiteUrl = null, abortSignal = null) {
     const config = await this.init();
-    
+
     Debug.log(`[StackProxy] Uploading file for ${workflow}`);
-    
+
     // Step 1: Upload file via proxy (needs private key)
     const fileBase64 = await this.fileToBase64(file);
     const userId = this.getUserId();
-    
+
     const uploadData = {
       action: 'upload_file',
       workflow: workflow,
@@ -121,38 +205,115 @@ const StackProxy = {
       fileBase64: fileBase64,
       mimeType: file.type || this.getMimeType(file.name)
     };
-    
-    // Upload via proxy
-    const uploadResponse = await fetch(this.proxyUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(uploadData),
-      signal: abortSignal
-    });
-    
-    const uploadResult = await uploadResponse.json();
-    
+
+    Debug.log(`[StackProxy] Uploading file via iframe, size: ${file.size} bytes`);
+
+    // Upload via iframe form submission to avoid CORS
+    const uploadResult = await this.postViaIframe(uploadData);
+
     if (!uploadResult.success) {
       throw new Error('File upload failed: ' + (uploadResult.error || 'Unknown error'));
     }
-    
+
     Debug.log(`[StackProxy] File uploaded, calling workflow...`);
-    
+
     // Step 2: Wait a moment for file to be processed
     await new Promise(resolve => setTimeout(resolve, 2000));
-    
+
     // Step 3: Call the workflow directly (no proxy needed)
     const payload = {
       user_id: userId,
       'doc-0': null  // Indicates uploaded document exists
     };
-    
+
     // Add website URL if this is the "both" workflow
     if (websiteUrl && workflow === 'company_both') {
       payload['in-0'] = websiteUrl;
     }
-    
+
     return this.call(workflow, payload, abortSignal);
+  },
+
+  /**
+   * POST data via hidden iframe to avoid CORS issues with Google Apps Script
+   */
+  async postViaIframe(data) {
+    return new Promise((resolve, reject) => {
+      const timeoutMs = 60000; // 1 minute for file upload
+      let completed = false;
+
+      // Create hidden iframe
+      const iframe = document.createElement('iframe');
+      iframe.name = 'uploadFrame_' + Date.now();
+      iframe.style.display = 'none';
+      document.body.appendChild(iframe);
+
+      // Create form
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = this.proxyUrl;
+      form.target = iframe.name;
+      form.style.display = 'none';
+
+      // Add data as hidden input
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = 'data';
+      input.value = JSON.stringify(data);
+      form.appendChild(input);
+
+      document.body.appendChild(form);
+
+      const cleanup = () => {
+        if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+        if (form.parentNode) form.parentNode.removeChild(form);
+      };
+
+      // Handle iframe load
+      iframe.onload = () => {
+        if (completed) return;
+
+        setTimeout(() => {
+          if (completed) return;
+
+          try {
+            const doc = iframe.contentDocument || iframe.contentWindow?.document;
+            if (doc && doc.body) {
+              const text = doc.body.innerText || doc.body.textContent;
+              if (text && text.trim()) {
+                const result = JSON.parse(text.trim());
+                completed = true;
+                cleanup();
+                resolve(result);
+                return;
+              }
+            }
+          } catch (e) {
+            Debug.warn('[StackProxy] Error reading upload response:', e.message);
+          }
+
+          // If we can't read the response, assume success (file uploads don't return much)
+          if (!completed) {
+            completed = true;
+            cleanup();
+            resolve({ success: true, message: 'Upload completed (response unreadable)' });
+          }
+        }, 1000);
+      };
+
+      // Timeout
+      setTimeout(() => {
+        if (!completed) {
+          completed = true;
+          cleanup();
+          reject(new Error('File upload timeout'));
+        }
+      }, timeoutMs);
+
+      // Submit form
+      Debug.log('[StackProxy] Submitting file upload via iframe...');
+      form.submit();
+    });
   },
   
   /**

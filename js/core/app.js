@@ -882,43 +882,33 @@ class App {
   /**
    * Show final submit confirmation modal when all scores are entered
    * Called by AssessmentView when all 5 dimension scores are submitted
-   * @param {Object} data - Score data and metadata
+   * Redirects user to Summary tab to add final recommendation before submitting
    */
-  async showFinalSubmitModal(data) {
-    const { scores, missingJustifications, avgAiScore, avgUserScore } = data;
-    
-    try {
-      const action = await this.modalManager.showFinalSubmitModal(data);
-      
-      switch (action) {
-        case 'submit':
-          // Submit all scores to Smartsheet
-          await this.submitFinalScores();
-          this.toastManager.success('Final scores submitted to database');
-          break;
-          
-        case 'addJustifications':
-          // Navigate to the first dimension missing a justification
-          if (missingJustifications && missingJustifications.length > 0) {
-            const firstMissing = missingJustifications[0];
-            this.tabManager.activateTab(firstMissing);
-            // Focus the justification textarea
-            setTimeout(() => {
-              const textarea = document.getElementById(`${firstMissing}-justification`);
-              if (textarea) textarea.focus();
-            }, 100);
-            this.toastManager.info(`Add justification for ${this.capitalize(firstMissing)} analysis`);
-          }
-          break;
-          
-        case 'cancel':
-        default:
-          // Do nothing, user can continue editing
-          break;
+  async showFinalSubmitModal() {
+    const modalHtml = `
+      <div class="modal-header">
+        <h3>
+          <svg class="modal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+            <polyline points="22 4 12 14.01 9 11.01"/>
+          </svg>
+          All Scores Submitted!
+        </h3>
+      </div>
+      <div class="modal-body">
+        <p>You've submitted scores for all 5 dimensions.</p>
+        <p>Go to the <strong>Summary</strong> tab to review your scores, add your final recommendation, and submit your complete assessment.</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn primary" data-action="go-to-summary">Go to Summary</button>
+      </div>
+    `;
+
+    this.modalManager.show(modalHtml, (action) => {
+      if (action === 'go-to-summary') {
+        this.tabManager.switchTo('summary');
       }
-    } catch (error) {
-      console.error('Error showing final submit modal:', error);
-    }
+    });
   }
 
   /**
@@ -927,15 +917,78 @@ class App {
   async submitFinalScores() {
     try {
       await this.submitAllScoresToSmartsheet();
-      
+
       // Enable export button if not already enabled
       const exportBtn = document.getElementById('export-btn');
       if (exportBtn) exportBtn.disabled = false;
-      
+
     } catch (error) {
       console.error('Error submitting final scores:', error);
       this.toastManager.error('Failed to submit scores. Please try exporting the report.');
     }
+  }
+
+  /**
+   * Submit final assessment with recommendation text to Smartsheet
+   * Called from SummaryView when user clicks "Submit Final Assessment"
+   * @param {string} recommendationText - The final recommendation text
+   */
+  async submitFinalAssessmentWithRecommendation(recommendationText) {
+    if (!window.SmartsheetIntegration) {
+      throw new Error('SmartsheetIntegration not loaded');
+    }
+
+    // Get base context
+    const context = window.SmartsheetIntegration.getContext();
+
+    // Add the final recommendation
+    context.finalRecommendation = recommendationText;
+
+    // Gather all score data
+    const allData = {
+      team: {
+        aiScore: this.assessmentView.aiScores.team,
+        userScore: this.assessmentView.userScores.team?.score,
+        justification: this.assessmentView.userScores.team?.justification
+      },
+      funding: {
+        aiScore: this.assessmentView.aiScores.funding,
+        userScore: this.assessmentView.userScores.funding?.score,
+        justification: this.assessmentView.userScores.funding?.justification
+      },
+      competitive: {
+        aiScore: this.assessmentView.aiScores.competitive,
+        userScore: this.assessmentView.userScores.competitive?.score,
+        justification: this.assessmentView.userScores.competitive?.justification
+      },
+      market: {
+        aiScore: this.assessmentView.aiScores.market,
+        userScore: this.assessmentView.userScores.market?.score,
+        justification: this.assessmentView.userScores.market?.justification
+      },
+      iprisk: {
+        aiScore: this.assessmentView.aiScores.iprisk,
+        userScore: this.assessmentView.userScores.iprisk?.score,
+        justification: this.assessmentView.userScores.iprisk?.justification
+      }
+    };
+
+    // Submit to Smartsheet
+    const result = await window.SmartsheetIntegration.submitAllScores(allData, context);
+
+    if (!result?.success) {
+      throw new Error(result?.error || 'Submission failed');
+    }
+
+    // Save recommendation to state
+    this.stateManager.saveFinalRecommendation(recommendationText);
+
+    // Enable export button
+    const exportBtn = document.getElementById('export-btn');
+    if (exportBtn) exportBtn.disabled = false;
+
+    Debug.log('Final assessment with recommendation submitted');
+    return result;
   }
 
   /**

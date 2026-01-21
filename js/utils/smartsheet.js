@@ -410,6 +410,11 @@ const SmartsheetIntegration = {
       payload.averageUserScore = userScores.reduce((a, b) => a + b, 0) / userScores.length;
     }
 
+    // Final recommendation
+    if (context.finalRecommendation) {
+      payload.finalRecommendation = context.finalRecommendation;
+    }
+
     return payload;
   },
 

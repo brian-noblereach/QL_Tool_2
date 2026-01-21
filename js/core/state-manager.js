@@ -91,7 +91,8 @@ class StateManager {
       userScores: {},
       scaName: null,
       smartsheetRowId: null,
-      assessmentKey: null
+      assessmentKey: null,
+      finalRecommendation: ''
     };
   }
 
@@ -123,6 +124,27 @@ class StateManager {
   getUserScores() {
     const state = this.getState();
     return state ? state.userScores : {};
+  }
+
+  /**
+   * Save final recommendation text
+   * @param {string} text - The recommendation text
+   */
+  saveFinalRecommendation(text) {
+    const state = this.getState();
+    if (!state) return;
+    state.finalRecommendation = text;
+    state.timestamp = Date.now();
+    this.saveState(state);
+  }
+
+  /**
+   * Get saved final recommendation text
+   * @returns {string} The recommendation text or empty string
+   */
+  getFinalRecommendation() {
+    const state = this.getState();
+    return state?.finalRecommendation || '';
   }
 
   markComplete() {

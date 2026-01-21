@@ -4,10 +4,105 @@
 class SummaryView {
   constructor() {
     this.data = null;
+    this.recommendationSubmitted = false;
   }
 
   init() {
-    console.log('SummaryView initialized');
+    Debug.log('SummaryView initialized');
+    this.setupFinalRecommendation();
+  }
+
+  /**
+   * Set up event handlers for the Final Recommendation section
+   */
+  setupFinalRecommendation() {
+    const section = document.getElementById('final-recommendation-section');
+    const textarea = document.getElementById('final-recommendation-text');
+    const charCount = document.getElementById('recommendation-char-count');
+    const submitBtn = document.getElementById('submit-final-recommendation');
+
+    if (!section || !textarea || !submitBtn) return;
+
+    // Character counter and auto-save
+    textarea.addEventListener('input', () => {
+      const length = textarea.value.length;
+      charCount.textContent = `${length} / 2000`;
+
+      // Enable button only if there's content and all scores submitted
+      submitBtn.disabled = length === 0 || !this.allScoresSubmitted();
+
+      // Auto-save to state
+      window.app?.stateManager?.saveFinalRecommendation(textarea.value);
+    });
+
+    // Submit handler
+    submitBtn.addEventListener('click', () => this.submitFinalRecommendation());
+
+    // Load saved recommendation if exists
+    const saved = window.app?.stateManager?.getFinalRecommendation();
+    if (saved) {
+      textarea.value = saved;
+      charCount.textContent = `${saved.length} / 2000`;
+    }
+  }
+
+  /**
+   * Check if all 5 dimension scores have been submitted
+   */
+  allScoresSubmitted() {
+    const scores = window.app?.assessmentView?.userScores || {};
+    const dimensions = ['team', 'funding', 'competitive', 'market', 'iprisk'];
+    return dimensions.every(d => scores[d]?.submitted);
+  }
+
+  /**
+   * Submit the final recommendation to Smartsheet
+   */
+  async submitFinalRecommendation() {
+    const textarea = document.getElementById('final-recommendation-text');
+    const submitBtn = document.getElementById('submit-final-recommendation');
+    const section = document.getElementById('final-recommendation-section');
+
+    if (!textarea?.value.trim()) return;
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Submitting...';
+
+    try {
+      await window.app.submitFinalAssessmentWithRecommendation(textarea.value);
+
+      section.classList.add('submitted');
+      submitBtn.textContent = '✓ Submitted';
+      this.recommendationSubmitted = true;
+
+      window.app?.toastManager?.success('Final assessment submitted successfully');
+    } catch (error) {
+      Debug.error('[SummaryView] Failed to submit recommendation:', error.message);
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Submit Final Assessment';
+      window.app?.toastManager?.error('Failed to submit. Please try again.');
+    }
+  }
+
+  /**
+   * Show or hide the recommendation section based on submission status
+   */
+  showRecommendationSection() {
+    const section = document.getElementById('final-recommendation-section');
+    if (!section) return;
+
+    if (this.allScoresSubmitted()) {
+      section.classList.remove('hidden');
+
+      // Enable submit button if there's text
+      const textarea = document.getElementById('final-recommendation-text');
+      const submitBtn = document.getElementById('submit-final-recommendation');
+      if (textarea && submitBtn && !this.recommendationSubmitted) {
+        submitBtn.disabled = textarea.value.length === 0;
+      }
+    } else {
+      section.classList.add('hidden');
+    }
   }
 
   update(results) {
@@ -58,11 +153,14 @@ class SummaryView {
       <div class="summary-actions">
         <p class="submission-status">
           ${statusInfo.submittedCount} of 5 assessments submitted
-          ${statusInfo.submittedCount < 5 && !statusInfo.hasFailures ? 
+          ${statusInfo.submittedCount < 5 && !statusInfo.hasFailures ?
             '<span class="status-hint">• Submit assessments in each tab before exporting</span>' : ''}
         </p>
       </div>
     `;
+
+    // Show/hide the final recommendation section based on submission status
+    this.showRecommendationSection();
   }
 
   // Extract AI score from various data structures

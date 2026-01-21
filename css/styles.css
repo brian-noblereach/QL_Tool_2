@@ -1304,6 +1304,78 @@ body {
   accent-color: var(--nr-teal-1);
 }
 
+/* ---------- Final Recommendation Styles ---------- */
+.final-recommendation {
+  margin-top: 24px;
+  padding: 20px;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid var(--slate-200);
+}
+
+.final-recommendation.hidden {
+  display: none;
+}
+
+.recommendation-header h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--slate-800);
+}
+
+.recommendation-header h3 svg {
+  color: var(--nr-teal-1);
+}
+
+.recommendation-hint {
+  margin: 0 0 12px 0;
+  font-size: 13px;
+  color: var(--slate-500);
+}
+
+.final-recommendation textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--slate-300);
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  resize: vertical;
+  min-height: 100px;
+  box-sizing: border-box;
+}
+
+.final-recommendation textarea:focus {
+  outline: none;
+  border-color: var(--nr-teal-1);
+  box-shadow: 0 0 0 3px rgba(0, 128, 128, 0.1);
+}
+
+.recommendation-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 12px;
+}
+
+#recommendation-char-count {
+  font-size: 12px;
+  color: var(--slate-400);
+}
+
+.final-recommendation.submitted textarea {
+  background: var(--slate-50);
+}
+
+.final-recommendation.submitted .btn {
+  background: var(--brand-success);
+}
+
 /* ---------- Overview Content ---------- */
 .overview-grid {
   display: grid;
