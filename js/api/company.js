@@ -36,7 +36,7 @@ const CompanyAPI = {
       workflow = 'company_url';
     }
 
-    console.log(`[CompanyAPI] Using workflow: ${workflow}, hasUrl: ${hasUrl}, hasFile: ${hasFile}`);
+    Debug.log(`[CompanyAPI] Using workflow: ${workflow}`);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.config.timeout);
@@ -88,9 +88,7 @@ const CompanyAPI = {
     // Validate response has required outputs
     const outputs = data?.outputs || {};
     
-    console.log('[CompanyAPI] Raw outputs keys:', Object.keys(outputs));
-    console.log('[CompanyAPI] out-6 type:', typeof outputs['out-6']);
-    console.log('[CompanyAPI] out-6 keys:', outputs['out-6'] ? Object.keys(outputs['out-6']) : 'null');
+    Debug.log('[CompanyAPI] Processing response outputs');
     
     if (!outputs['out-6'] && !outputs['out-7']) {
       throw new Error('Company API did not return expected outputs (out-6 or out-7)');
@@ -99,7 +97,7 @@ const CompanyAPI = {
     // Parse full output (out-6) - this IS JSON
     const fullOutput = this.parseOutput(outputs['out-6'], 'full company data');
     
-    console.log('[CompanyAPI] Parsed fullOutput keys:', fullOutput ? Object.keys(fullOutput) : 'null');
+    Debug.log('[CompanyAPI] Parsed full output');
     
     // Get short output (out-7) - treat as TEXT, not JSON
     const shortOutput = this.extractTextOutput(outputs['out-7']);
@@ -114,12 +112,7 @@ const CompanyAPI = {
     // Short output is kept as text string for passing to other APIs
     const short = shortOutput || '';
 
-    console.log('[CompanyAPI] Final processed outputs:', {
-      fullKeys: Object.keys(full),
-      hasCompanyOverview: !!full.company_overview,
-      companyName: full.company_overview?.name,
-      shortLength: short.length
-    });
+    Debug.log('[CompanyAPI] Processing complete:', full.company_overview?.name || 'Unknown');
 
     return { full, short };
   },
@@ -156,11 +149,11 @@ const CompanyAPI = {
   parseOutput(rawOutput, label = 'output') {
     if (!rawOutput) return null;
 
-    console.log(`[CompanyAPI] parseOutput ${label}: type=${typeof rawOutput}`);
+    Debug.log(`[CompanyAPI] parseOutput ${label}`);
 
     // Handle object with text property (Stack AI wrapper)
     if (typeof rawOutput === 'object' && rawOutput.text) {
-      console.log(`[CompanyAPI] parseOutput ${label}: found text property, recursing`);
+      Debug.log(`[CompanyAPI] parseOutput ${label}: unwrapping`);
       return this.parseOutput(rawOutput.text, label);
     }
 
@@ -168,11 +161,11 @@ const CompanyAPI = {
     if (typeof rawOutput === 'object') {
       // Check if it has the expected schema structure
       if (rawOutput.company_overview || rawOutput.technology || rawOutput.company_profile) {
-        console.log(`[CompanyAPI] parseOutput ${label}: already parsed object with schema keys`);
+        Debug.log(`[CompanyAPI] parseOutput ${label}: found schema structure`);
         return rawOutput;
       }
       // Otherwise might be wrapped differently
-      console.log(`[CompanyAPI] parseOutput ${label}: object without expected keys:`, Object.keys(rawOutput));
+      Debug.log(`[CompanyAPI] parseOutput ${label}: non-standard structure`);
       return rawOutput;
     }
 
@@ -193,11 +186,10 @@ const CompanyAPI = {
         }
         
         const parsed = JSON.parse(cleaned.trim());
-        console.log(`[CompanyAPI] parseOutput ${label}: parsed JSON string, keys:`, Object.keys(parsed));
+        Debug.log(`[CompanyAPI] parseOutput ${label}: parsed JSON`);
         return parsed;
       } catch (error) {
-        console.error(`[CompanyAPI] Failed to parse ${label}:`, error);
-        console.error(`[CompanyAPI] Raw string (first 500 chars):`, rawOutput.slice(0, 500));
+        Debug.error(`[CompanyAPI] Failed to parse ${label}:`, error.message);
         return null;
       }
     }

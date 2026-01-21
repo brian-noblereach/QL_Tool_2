@@ -8,13 +8,13 @@ const Validators = {
     }
 
     // Log what we received for debugging
-    console.log('[Validators] Company data keys:', Object.keys(data));
+    Debug.log('[Validators] Company data keys:', Object.keys(data).length);
 
     // Check for company_overview section (required by schema)
     const overview = data.company_overview || {};
     
     if (overview && Object.keys(overview).length > 0) {
-      console.log('[Validators] Overview keys:', Object.keys(overview));
+      Debug.log('[Validators] Has company overview');
     }
 
     // Get company name from various possible locations
@@ -48,7 +48,7 @@ const Validators = {
         const urlToTest = website.startsWith('http') ? website : 'https://' + website;
         new URL(urlToTest);
       } catch {
-        console.warn('[Validators] Website URL may be invalid:', website);
+        Debug.warn('[Validators] Website URL may be invalid');
       }
     }
 
@@ -308,6 +308,85 @@ const Validators = {
     }
 
     return { valid: true, data: arr.filter(item => item.trim()) };
+  },
+
+  /**
+   * Generic API response validation
+   * Validates response structure before processing to prevent crashes
+   * @param {Object} response - The API response to validate
+   * @param {string} responseType - Type of response: 'team', 'funding', 'competitive', 'market', 'iprisk'
+   * @returns {Object} { valid: boolean, error?: string }
+   */
+  validateApiResponse(response, responseType) {
+    if (!response || typeof response !== 'object') {
+      return { valid: false, error: `Invalid ${responseType} response: not an object` };
+    }
+
+    // Schema definitions for each response type
+    const schemas = {
+      team: {
+        required: [],
+        optional: ['score', 'formatted', 'team', 'scoring', 'assessment'],
+        scoreField: 'score'
+      },
+      funding: {
+        required: [],
+        optional: ['score', 'formatted', 'rounds', 'peer_deals', 'funding_analysis'],
+        scoreField: 'score'
+      },
+      competitive: {
+        required: ['assessment'],
+        optional: ['analysis', 'market_overview', 'competitors'],
+        scoreField: 'assessment.score'
+      },
+      market: {
+        required: ['scoring'],
+        optional: ['analysis', 'formatted', 'markets'],
+        scoreField: 'scoring.score'
+      },
+      iprisk: {
+        required: [],
+        optional: ['score', 'formatted', 'ip_analysis', 'patent_analysis'],
+        scoreField: 'score'
+      }
+    };
+
+    const schema = schemas[responseType];
+    if (!schema) {
+      return { valid: true }; // Unknown type, allow through
+    }
+
+    // Check required fields
+    for (const field of schema.required) {
+      if (!(field in response)) {
+        return { valid: false, error: `Missing required field '${field}' in ${responseType} response` };
+      }
+    }
+
+    // Validate score is in valid range if present
+    const scoreValue = this.getNestedValue(response, schema.scoreField);
+    if (scoreValue !== undefined && scoreValue !== null) {
+      const numScore = typeof scoreValue === 'number' ? scoreValue : parseInt(scoreValue, 10);
+      if (isNaN(numScore) || numScore < 1 || numScore > 9) {
+        Debug.warn(`${responseType} response has invalid score: ${scoreValue}`);
+        // Don't fail validation, just warn - score can be normalized later
+      }
+    }
+
+    return { valid: true };
+  },
+
+  /**
+   * Get nested value from object using dot notation
+   * @param {Object} obj - Object to search
+   * @param {string} path - Dot-notated path (e.g., 'assessment.score')
+   * @returns {*} The value or undefined
+   */
+  getNestedValue(obj, path) {
+    if (!path) return undefined;
+    return path.split('.').reduce((current, key) => {
+      return current && current[key] !== undefined ? current[key] : undefined;
+    }, obj);
   }
 };
 

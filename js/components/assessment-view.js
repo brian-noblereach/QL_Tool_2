@@ -1857,11 +1857,15 @@ class AssessmentView {
   
   escape(str) {
     if (!str) return '';
+    // Comprehensive HTML entity escaping to prevent XSS
     return String(str)
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#x27;')
+      .replace(/\//g, '&#x2F;')
+      .replace(/`/g, '&#x60;');
   }
 
   // Format rationale text - handle bullets and newlines

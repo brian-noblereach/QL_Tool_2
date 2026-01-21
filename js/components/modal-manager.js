@@ -384,6 +384,62 @@ class ModalManager {
     });
   }
 
+  /**
+   * Show welcome modal for first-time users
+   * @returns {Promise<string>} - 'start'
+   */
+  showWelcomeModal() {
+    return new Promise((resolve) => {
+      const modalHtml =
+        '<div class="modal-header">' +
+          '<h3>' +
+            '<svg class="modal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+              '<path d="M12 2L2 7l10 5 10-5-10-5z"/>' +
+              '<path d="M2 17l10 5 10-5"/>' +
+              '<path d="M2 12l10 5 10-5"/>' +
+            '</svg>' +
+            'Welcome to Venture Assessment' +
+          '</h3>' +
+        '</div>' +
+        '<div class="modal-body">' +
+          '<p>This tool uses AI to help you evaluate deep-tech ventures across five key dimensions.</p>' +
+          '<div class="welcome-steps">' +
+            '<div class="welcome-step">' +
+              '<span class="step-number">1</span>' +
+              '<span class="step-text">Enter a company website URL, upload a PDF about the company, or both</span>' +
+            '</div>' +
+            '<div class="welcome-step">' +
+              '<span class="step-number">2</span>' +
+              '<span class="step-text">Wait for AI analysis (~5-10 minutes)</span>' +
+            '</div>' +
+            '<div class="welcome-step">' +
+              '<span class="step-number">3</span>' +
+              '<span class="step-text">Review AI scores and add your own assessment for each dimension</span>' +
+            '</div>' +
+            '<div class="welcome-step">' +
+              '<span class="step-number">4</span>' +
+              '<span class="step-text">Submit final scores and export your report</span>' +
+            '</div>' +
+          '</div>' +
+          '<label class="welcome-checkbox">' +
+            '<input type="checkbox" id="welcome-dont-show">' +
+            '<span>Don\'t show this again</span>' +
+          '</label>' +
+        '</div>' +
+        '<div class="modal-footer">' +
+          '<button class="btn primary" data-action="start">Get Started</button>' +
+        '</div>';
+
+      this.show(modalHtml, (action) => {
+        const dontShow = document.getElementById('welcome-dont-show')?.checked;
+        if (dontShow) {
+          localStorage.setItem('welcome_modal_dismissed', 'true');
+        }
+        resolve(action);
+      });
+    });
+  }
+
   show(html, onAction) {
     if (!this.content || !this.overlay) return;
     

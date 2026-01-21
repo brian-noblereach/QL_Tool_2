@@ -53,7 +53,10 @@ class App {
       
       // Check for incomplete analysis
       await this.checkForIncompleteAnalysis();
-      
+
+      // Check for first-time user and show welcome modal
+      await this.checkForFirstTimeUser();
+
       // Setup pilot banner
       this.setupPilotBanner();
       
@@ -331,10 +334,27 @@ class App {
     
     if (feedbackBtn) {
       feedbackBtn.addEventListener('click', () => {
-        // Open feedback form - placeholder URL
-        window.open('https://forms.office.com/r/YOUR_FORM_ID', '_blank');
+        window.open('https://forms.osi.office365.us/r/kWXTaUrAAd', '_blank');
       });
     }
+  }
+
+  /**
+   * Check if this is a first-time user and show welcome modal
+   */
+  async checkForFirstTimeUser() {
+    // Don't show if user has dismissed it
+    if (localStorage.getItem('welcome_modal_dismissed') === 'true') {
+      return;
+    }
+
+    // Don't show if there's saved state (returning user)
+    if (this.stateManager.hasIncompleteAnalysis()) {
+      return;
+    }
+
+    // Show welcome modal
+    await this.modalManager.showWelcomeModal();
   }
 
   async startAnalysis() {
@@ -806,7 +826,7 @@ class App {
    */
   async submitAllScoresToSmartsheet() {
     if (!window.SmartsheetIntegration) {
-      console.warn('SmartsheetIntegration not loaded, skipping Smartsheet submission');
+      Debug.warn('SmartsheetIntegration not loaded, skipping submission');
       return;
     }
 
@@ -841,12 +861,21 @@ class App {
         }
       };
 
-      await window.SmartsheetIntegration.submitAllScores(allData, context);
-      console.log('All scores submitted to Smartsheet on export');
-      
+      const result = await window.SmartsheetIntegration.submitAllScores(allData, context);
+      if (result?.success) {
+        Debug.log('All scores submitted to Smartsheet');
+      } else {
+        // Submission returned but indicated failure
+        throw new Error(result?.error || 'Submission returned unsuccessful');
+      }
+
     } catch (error) {
-      console.error('Failed to submit scores to Smartsheet:', error);
-      // Don't fail the export if Smartsheet submission fails
+      Debug.error('Failed to submit scores to Smartsheet:', error.message);
+      // Notify user but don't fail the export
+      this.toastManager?.warning(
+        'Scores saved locally. Database sync failed - will retry on next export.',
+        { duration: 6000 }
+      );
     }
   }
 

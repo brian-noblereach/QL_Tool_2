@@ -22,7 +22,7 @@ const StackProxy = {
     this.config = await this.configPromise;
     this.configPromise = null;
     
-    console.log('[StackProxy] Initialized with config:', Object.keys(this.config.workflows || {}));
+    Debug.log('[StackProxy] Initialized with workflows:', Object.keys(this.config.workflows || {}).length);
     return this.config;
   },
   
@@ -62,7 +62,7 @@ const StackProxy = {
     
     const url = `${config.baseUrl}/${workflowId}`;
     
-    console.log(`[StackProxy] Calling ${workflow} directly at ${url}`);
+    Debug.log(`[StackProxy] Calling workflow: ${workflow}`);
     
     const startTime = Date.now();
     
@@ -86,17 +86,17 @@ const StackProxy = {
       }
       
       const data = await response.json();
-      console.log(`[StackProxy] ${workflow} completed successfully (${elapsed}s)`);
+      Debug.log(`[StackProxy] ${workflow} completed (${elapsed}s)`);
       
       return data;
       
     } catch (error) {
       if (error.name === 'AbortError') {
-        console.log(`[StackProxy] ${workflow} was cancelled`);
+        Debug.log(`[StackProxy] ${workflow} was cancelled`);
         throw error;
       }
-      
-      console.error(`[StackProxy] ${workflow} error:`, error);
+
+      Debug.error(`[StackProxy] ${workflow} error:`, error.message);
       throw error;
     }
   },
@@ -107,7 +107,7 @@ const StackProxy = {
   async callWithFile(workflow, file, websiteUrl = null, abortSignal = null) {
     const config = await this.init();
     
-    console.log(`[StackProxy] Uploading file for ${workflow}: ${file.name}`);
+    Debug.log(`[StackProxy] Uploading file for ${workflow}`);
     
     // Step 1: Upload file via proxy (needs private key)
     const fileBase64 = await this.fileToBase64(file);
@@ -136,7 +136,7 @@ const StackProxy = {
       throw new Error('File upload failed: ' + (uploadResult.error || 'Unknown error'));
     }
     
-    console.log(`[StackProxy] File uploaded, now calling workflow directly...`);
+    Debug.log(`[StackProxy] File uploaded, calling workflow...`);
     
     // Step 2: Wait a moment for file to be processed
     await new Promise(resolve => setTimeout(resolve, 2000));
@@ -202,6 +202,6 @@ window.StackProxy = StackProxy;
 // Initialize on load
 document.addEventListener('DOMContentLoaded', () => {
   StackProxy.init().catch(err => {
-    console.error('[StackProxy] Failed to initialize:', err);
+    Debug.error('[StackProxy] Failed to initialize:', err.message);
   });
 });

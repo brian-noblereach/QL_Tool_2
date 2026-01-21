@@ -3,6 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Content Security Policy - restrict resource loading for XSS protection -->
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://script.google.com https://script.googleusercontent.com;
+    style-src 'self' 'unsafe-inline' https://api.fontshare.com;
+    font-src 'self' https://api.fontshare.com https://cdn.fontshare.com;
+    connect-src 'self' https://api.stack-ai.com https://script.google.com https://script.googleusercontent.com https://*.smartsheetgov.com https://cdnjs.cloudflare.com;
+    img-src 'self' data: https:;
+    frame-src 'none';
+  ">
   <title>Venture Assessment | NobleReach</title>
   
   <!-- Favicon -->
@@ -184,8 +194,10 @@
           </div>
           <div class="progress-stats">
             <span id="progress-percentage">0%</span>
+            <span id="progress-elapsed"></span>
             <span id="progress-time">Estimated: ~10 min</span>
           </div>
+          <div id="progress-message" class="progress-message hidden"></div>
         </div>
         
         <div class="phase-list" id="phase-list">
@@ -633,7 +645,8 @@
   </div>
 
   <!-- Scripts -->
-  <!-- Utilities -->
+  <!-- Utilities (debug.js must load first) -->
+  <script src="js/utils/debug.js"></script>
   <script src="js/utils/validators.js"></script>
   <script src="js/utils/formatters.js"></script>
   <script src="js/utils/export.js"></script>

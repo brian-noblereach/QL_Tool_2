@@ -497,6 +497,27 @@ body {
   font-weight: 600;
 }
 
+#progress-elapsed {
+  color: var(--slate-500);
+  font-size: 13px;
+}
+
+.progress-message {
+  margin-top: 12px;
+  padding: 10px 14px;
+  background: var(--slate-100);
+  border-radius: 8px;
+  font-size: 14px;
+  color: var(--slate-600);
+  text-align: center;
+}
+
+.progress-message.warning {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fcd34d;
+}
+
 .phase-list {
   display: flex;
   flex-direction: column;
@@ -1219,6 +1240,68 @@ body {
 .modal-footer .btn {
   min-width: 120px;
   justify-content: center;
+}
+
+.modal-footer .btn.outline {
+  background: transparent;
+  border-color: var(--slate-300);
+  color: var(--slate-700);
+}
+
+.modal-footer .btn.outline:hover:not(:disabled) {
+  background: var(--slate-100);
+  border-color: var(--slate-400);
+}
+
+/* ---------- Welcome Modal Styles ---------- */
+.welcome-steps {
+  margin: 16px 0;
+}
+
+.welcome-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 0;
+}
+
+.step-number {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  background: var(--nr-teal-1);
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.step-text {
+  font-size: 14px;
+  color: var(--slate-600);
+  line-height: 1.5;
+  padding-top: 2px;
+}
+
+.welcome-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--slate-200);
+  font-size: 13px;
+  color: var(--slate-500);
+  cursor: pointer;
+}
+
+.welcome-checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--nr-teal-1);
 }
 
 /* ---------- Overview Content ---------- */
@@ -2408,18 +2491,7 @@ body {
 /* ---------- Scoring Card Submitted State ---------- */
 .scoring-card.has-submission {
   border-color: var(--brand-success);
-  box-shadow: 0 0 0 1px var(--brand-success), var(--shadow);
-}
-
-.scoring-card.has-submission::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  background: var(--brand-success);
-  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  box-shadow: var(--shadow);
 }
 
 .scoring-card {

@@ -167,33 +167,51 @@ class AnalysisPipeline {
         data: this.phases.find(p => p.key === 'company')?.data
       });
 
-      // Run remaining analyses in parallel
-      const teamPromise = this.executePhase('team').catch(e => ({ error: e, phase: 'team' }));
-      const fundingPromise = this.executePhase('funding').catch(e => ({ error: e, phase: 'funding' }));
-      const competitivePromise = this.executePhase('competitive').catch(e => ({ error: e, phase: 'competitive' }));
-      const ipRiskPromise = this.executePhase('iprisk').catch(e => ({ error: e, phase: 'iprisk' }));
+      // Run remaining analyses in parallel using Promise.allSettled for better error resilience
+      // Each phase handles its own errors independently - one failure doesn't affect others
+      const parallelPhases = [
+        { key: 'team', promise: this.executePhase('team') },
+        { key: 'funding', promise: this.executePhase('funding') },
+        { key: 'competitive', promise: this.executePhase('competitive') },
+        { key: 'iprisk', promise: this.executePhase('iprisk') }
+      ];
 
-      // Market depends on competitive
-      const marketPromise = competitivePromise.then(result => {
-        if (result?.error) {
-          const phase = this.phases.find(p => p.key === 'market');
-          phase.status = 'error';
-          phase.error = new Error('Skipped: Competitive analysis failed');
-          this.emit('phaseError', {
-            phase: 'market',
-            name: 'Market Analysis',
-            error: 'Skipped: Competitive analysis required first',
-            canRetry: false
-          });
-          return { error: result.error, phase: 'market' };
+      // Wait for initial parallel phases
+      const parallelResults = await Promise.allSettled(parallelPhases.map(p => p.promise));
+
+      // Log results for debugging
+      parallelResults.forEach((result, index) => {
+        const phaseKey = parallelPhases[index].key;
+        if (result.status === 'rejected') {
+          Debug.log(`Phase ${phaseKey} failed:`, result.reason?.message || 'Unknown error');
         }
-        if (this.abortController?.signal.aborted) {
-          return { error: new Error('Analysis cancelled'), phase: 'market' };
-        }
-        return this.executePhase('market').catch(e => ({ error: e, phase: 'market' }));
       });
 
-      await Promise.all([teamPromise, fundingPromise, competitivePromise, ipRiskPromise, marketPromise]);
+      // Market depends on competitive - check if competitive succeeded
+      const competitiveIndex = parallelPhases.findIndex(p => p.key === 'competitive');
+      const competitiveResult = parallelResults[competitiveIndex];
+
+      if (competitiveResult.status === 'fulfilled') {
+        // Competitive succeeded, run market
+        if (!this.abortController?.signal.aborted) {
+          try {
+            await this.executePhase('market');
+          } catch (marketError) {
+            Debug.log('Market phase failed:', marketError?.message || 'Unknown error');
+          }
+        }
+      } else {
+        // Competitive failed, skip market
+        const marketPhase = this.phases.find(p => p.key === 'market');
+        marketPhase.status = 'error';
+        marketPhase.error = new Error('Skipped: Competitive analysis failed');
+        this.emit('phaseError', {
+          phase: 'market',
+          name: 'Market Analysis',
+          error: 'Skipped: Competitive analysis required first',
+          canRetry: false
+        });
+      }
 
       const allSucceeded = this.phases.every(p => p.status === 'completed');
       

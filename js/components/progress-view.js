@@ -4,8 +4,11 @@ class ProgressView {
   constructor() {
     this.pipeline = null;
     this.progressInterval = null;
+    this.elapsedInterval = null;
+    this.startTime = null;
     this.elements = {};
     this.isPartialComplete = false;
+    this.lastMessageThreshold = 0;
   }
 
   init() {
@@ -13,35 +16,99 @@ class ProgressView {
       fill: document.getElementById('progress-fill'),
       percentage: document.getElementById('progress-percentage'),
       time: document.getElementById('progress-time'),
-      companyName: document.getElementById('progress-company-name')
+      companyName: document.getElementById('progress-company-name'),
+      elapsed: document.getElementById('progress-elapsed'),
+      message: document.getElementById('progress-message')
     };
-    console.log('ProgressView initialized');
+    Debug.log('ProgressView initialized');
   }
 
   start(pipeline) {
     this.pipeline = pipeline;
     this.isPartialComplete = false;
+    this.startTime = Date.now();
+    this.lastMessageThreshold = 0;
     this.startProgressUpdates();
+    this.startElapsedTimer();
   }
 
   startProgressUpdates() {
     this.progressInterval = setInterval(() => {
       if (!this.pipeline || this.isPartialComplete) return;
-      
+
       const progress = this.pipeline.getProgress();
       this.updateDisplay(progress);
     }, 1000);
+  }
+
+  /**
+   * Start elapsed time timer and show reassurance messages
+   */
+  startElapsedTimer() {
+    this.elapsedInterval = setInterval(() => {
+      if (!this.startTime) return;
+
+      const elapsed = Math.floor((Date.now() - this.startTime) / 1000);
+      this.updateElapsedDisplay(elapsed);
+      this.showReassuranceMessage(elapsed);
+    }, 1000);
+  }
+
+  /**
+   * Update elapsed time display
+   */
+  updateElapsedDisplay(elapsedSeconds) {
+    if (!this.elements.elapsed) return;
+
+    const minutes = Math.floor(elapsedSeconds / 60);
+    const seconds = elapsedSeconds % 60;
+    this.elements.elapsed.textContent = `Elapsed: ${minutes}:${seconds.toString().padStart(2, '0')}`;
+  }
+
+  /**
+   * Show contextual reassurance messages based on elapsed time
+   */
+  showReassuranceMessage(elapsedSeconds) {
+    if (!this.elements.message) return;
+
+    // Define message thresholds (in seconds)
+    const messages = [
+      { threshold: 120, text: 'Analysis in progress...' },
+      { threshold: 180, text: 'AI is analyzing multiple data sources. This can take several minutes.' },
+      { threshold: 300, text: 'Still working. Complex analyses may take 5-10 minutes.' },
+      { threshold: 420, text: 'Taking longer than usual. You may cancel and retry if needed.' },
+      { threshold: 540, text: 'Approaching timeout limit. Consider canceling if no progress.' }
+    ];
+
+    // Find the appropriate message
+    let currentMessage = '';
+    for (const msg of messages) {
+      if (elapsedSeconds >= msg.threshold && msg.threshold > this.lastMessageThreshold) {
+        currentMessage = msg.text;
+        this.lastMessageThreshold = msg.threshold;
+      }
+    }
+
+    if (currentMessage) {
+      this.elements.message.textContent = currentMessage;
+      this.elements.message.classList.remove('hidden');
+
+      // Add warning styling for later messages
+      if (elapsedSeconds >= 420) {
+        this.elements.message.classList.add('warning');
+      }
+    }
   }
 
   updateDisplay(progress) {
     if (this.elements.fill) {
       this.elements.fill.style.width = `${progress.percentage}%`;
     }
-    
+
     if (this.elements.percentage) {
       this.elements.percentage.textContent = `${Math.round(progress.percentage)}%`;
     }
-    
+
     if (this.elements.time) {
       const remaining = Math.max(0, Math.round(progress.remaining / 60));
       this.elements.time.textContent = remaining > 0 ? `~${remaining} min remaining` : 'Almost done...';
@@ -124,7 +191,7 @@ class ProgressView {
   }
 
   hide() {
-    this.stopProgressUpdates();
+    this.stopAllTimers();
     const section = document.getElementById('progress-section');
     if (section) section.classList.add('hidden');
   }
@@ -136,11 +203,21 @@ class ProgressView {
     }
   }
 
-  reset() {
+  stopAllTimers() {
     this.stopProgressUpdates();
+    if (this.elapsedInterval) {
+      clearInterval(this.elapsedInterval);
+      this.elapsedInterval = null;
+    }
+    this.startTime = null;
+  }
+
+  reset() {
+    this.stopAllTimers();
     this.pipeline = null;
     this.isPartialComplete = false;
-    
+    this.lastMessageThreshold = 0;
+
     if (this.elements.fill) {
       this.elements.fill.style.width = '0%';
       this.elements.fill.classList.remove('warning');
@@ -152,6 +229,14 @@ class ProgressView {
     if (this.elements.time) {
       this.elements.time.textContent = 'Estimated: ~10 min';
       this.elements.time.classList.remove('warning');
+    }
+    if (this.elements.elapsed) {
+      this.elements.elapsed.textContent = '';
+    }
+    if (this.elements.message) {
+      this.elements.message.textContent = '';
+      this.elements.message.classList.add('hidden');
+      this.elements.message.classList.remove('warning');
     }
     
     // Reset compact progress too

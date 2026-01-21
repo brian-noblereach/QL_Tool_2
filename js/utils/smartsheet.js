@@ -20,7 +20,7 @@ const SmartsheetIntegration = {
    */
   async submitScore(metric, scoreData, context) {
     if (this.state.isSubmitting) {
-      console.log('Submission already in progress, queuing...');
+      Debug.log('Smartsheet submission already in progress');
       return { success: false, message: 'Please wait for current submission to complete' };
     }
 
@@ -37,7 +37,7 @@ const SmartsheetIntegration = {
         payload.rowId = rowId;
       }
       
-      console.log(`${isUpdate ? 'Updating' : 'Submitting'} ${metric} score to Smartsheet:`, payload);
+      Debug.log(`Smartsheet: ${isUpdate ? 'updating' : 'submitting'} ${metric} score`);
 
       const requestData = {
         action: isUpdate ? 'smartsheet_update' : 'smartsheet',
@@ -96,7 +96,7 @@ const SmartsheetIntegration = {
         payload.rowId = rowId;
       }
       
-      console.log(`${isUpdate ? 'Updating' : 'Submitting'} all scores to Smartsheet:`, payload);
+      Debug.log(`Smartsheet: ${isUpdate ? 'updating' : 'submitting'} all scores`);
 
       const requestData = {
         action: isUpdate ? 'smartsheet_update' : 'smartsheet',
@@ -141,12 +141,12 @@ const SmartsheetIntegration = {
         params.advisorName = advisorName;
       }
 
-      console.log('Fetching past assessments from Smartsheet...');
+      Debug.log('Smartsheet: fetching past assessments');
       
       const result = await this.submitViaIframe(params);
       
       if (result.success && result.assessments) {
-        console.log(`Found ${result.assessments.length} past assessments`);
+        Debug.log(`Smartsheet: found ${result.assessments.length} past assessments`);
         return result.assessments;
       }
       
@@ -169,7 +169,7 @@ const SmartsheetIntegration = {
         rowId: rowId
       };
 
-      console.log('Loading assessment from Smartsheet:', rowId);
+      Debug.log('Smartsheet: loading assessment');
       
       const result = await this.submitViaIframe(params);
       
@@ -240,7 +240,7 @@ const SmartsheetIntegration = {
         }
       }, 5000); // Short timeout, then try image
       
-      console.log('[Smartsheet] Submitting via script tag...');
+      Debug.log('[Smartsheet] Submitting via script tag');
       document.body.appendChild(script);
     });
   },
@@ -255,16 +255,16 @@ const SmartsheetIntegration = {
       
       const img = new Image();
       img.onload = () => {
-        console.log('[Smartsheet] Image beacon completed');
+        Debug.log('[Smartsheet] Image beacon completed');
         resolve({ success: true, message: 'Submitted via beacon' });
       };
       img.onerror = () => {
         // Even on error, the request was likely sent
-        console.log('[Smartsheet] Image beacon sent (response unreadable)');
+        Debug.log('[Smartsheet] Image beacon sent');
         resolve({ success: true, message: 'Submitted (fire and forget)' });
       };
-      
-      console.log('[Smartsheet] Submitting via image beacon...');
+
+      Debug.log('[Smartsheet] Submitting via image beacon');
       img.src = url;
       
       // Resolve after short delay regardless
@@ -293,7 +293,7 @@ const SmartsheetIntegration = {
     if (window.app?.stateManager) {
       window.app.stateManager.saveSmartsheetRowId(rowId);
     }
-    console.log('[Smartsheet] Row ID set:', rowId);
+    Debug.log('[Smartsheet] Row ID set');
   },
 
   /**

@@ -30,8 +30,9 @@ class BaseAPI {
     this.outputKeys = config.outputKeys || [];
     this.phaseName = config.phaseName || 'unknown';
     
-    // API token - should be moved to backend in production
-    this.token = 'e80f3814-a651-4de7-a7ba-8478b7a9047b';
+    // LEGACY: This class is no longer actively used - StackProxy v2 handles auth
+    // Token removed for security - all API calls should use StackProxy
+    this.token = null;
   }
 
   /**
