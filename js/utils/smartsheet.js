@@ -45,7 +45,9 @@ const SmartsheetIntegration = {
       };
 
       // Use iframe submission to avoid CORS
+      Debug.log('[Smartsheet] Request data:', JSON.stringify(requestData));
       const result = await this.submitViaIframe(requestData);
+      Debug.log('[Smartsheet] Full response:', JSON.stringify(result));
 
       if (result.success) {
         // Store row ID if this was a new submission
@@ -103,14 +105,16 @@ const SmartsheetIntegration = {
         ...payload
       };
 
+      Debug.log('[Smartsheet] All scores request:', JSON.stringify(requestData));
       const result = await this.submitViaIframe(requestData);
+      Debug.log('[Smartsheet] All scores response:', JSON.stringify(result));
 
       if (result.success) {
         // Store row ID if this was a new submission
         if (result.rowId && !isUpdate) {
           this.setCurrentRowId(result.rowId);
         }
-        
+
         this.showToast(`All scores ${isUpdate ? 'updated' : 'saved'} to database`, 'success');
         return result;
       } else {
@@ -190,35 +194,45 @@ const SmartsheetIntegration = {
    */
   submitViaIframe(data) {
     return new Promise((resolve, reject) => {
-      const timeoutMs = 30000;
       let completed = false;
-      
+
       // Create a unique callback name
       const callbackName = 'smartsheetCallback_' + Date.now();
-      
+
       // Encode the data as URL parameter
       const encodedData = encodeURIComponent(JSON.stringify(data));
       const url = `${this.proxyUrl}?data=${encodedData}&callback=${callbackName}`;
-      
+
+      Debug.log('[Smartsheet] Proxy URL:', this.proxyUrl);
+      Debug.log('[Smartsheet] Action:', data.action);
+
+      const cleanup = () => {
+        // Delay cleanup to allow callback to fire
+        setTimeout(() => {
+          delete window[callbackName];
+          if (script.parentNode) script.parentNode.removeChild(script);
+        }, 100);
+      };
+
       // Create global callback function
       window[callbackName] = (response) => {
-        if (completed) return;
+        Debug.log('[Smartsheet] Callback received:', response);
+        if (completed) {
+          Debug.warn('[Smartsheet] Callback received after completion');
+          return;
+        }
         completed = true;
         cleanup();
         resolve(response || { success: true });
       };
-      
+
       // Create script element
       const script = document.createElement('script');
       script.src = url;
       script.async = true;
-      
-      const cleanup = () => {
-        delete window[callbackName];
-        if (script.parentNode) script.parentNode.removeChild(script);
-      };
-      
-      script.onerror = () => {
+
+      script.onerror = (e) => {
+        Debug.error('[Smartsheet] Script load error:', e);
         if (completed) return;
         completed = true;
         cleanup();
@@ -227,10 +241,11 @@ const SmartsheetIntegration = {
           .then(resolve)
           .catch(reject);
       };
-      
-      // Timeout
+
+      // Longer timeout to allow for slower connections
       setTimeout(() => {
         if (!completed) {
+          Debug.warn('[Smartsheet] JSONP timeout, trying image beacon');
           completed = true;
           cleanup();
           // On timeout, try image beacon
@@ -238,8 +253,8 @@ const SmartsheetIntegration = {
             .then(resolve)
             .catch(() => reject(new Error('Submission timeout')));
         }
-      }, 5000); // Short timeout, then try image
-      
+      }, 15000); // Increased to 15 seconds
+
       Debug.log('[Smartsheet] Submitting via script tag');
       document.body.appendChild(script);
     });
@@ -462,20 +477,25 @@ const SmartsheetIntegration = {
   },
 
   /**
-   * Get venture name from app state or DOM
+   * Get venture name from app (uses custom name if set, otherwise AI-generated)
    */
   getVentureName() {
-    // Try assessment view data first
+    // Use app's getVentureName which handles custom name fallback
+    if (window.app?.getVentureName) {
+      return window.app.getVentureName();
+    }
+
+    // Fallback: Try assessment view data
     if (window.app?.assessmentView?.data?.company?.company_overview?.name) {
       return window.app.assessmentView.data.company.company_overview.name;
     }
-    // Try progress company name element
-    const progressName = document.getElementById('progress-company-name');
-    if (progressName && progressName.textContent && !progressName.textContent.includes('Analyzing')) {
-      // Extract company name from "Analyzing: https://example.com"
-      const text = progressName.textContent.replace('Analyzing:', '').trim();
-      return text || 'Unknown Venture';
+
+    // Fallback: Try venture name text element
+    const ventureName = document.getElementById('venture-name-text');
+    if (ventureName && ventureName.textContent && ventureName.textContent !== 'Loading...') {
+      return ventureName.textContent;
     }
+
     return 'Unknown Venture';
   },
 

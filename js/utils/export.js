@@ -210,10 +210,16 @@ const ExportUtility = {
 
       this.setupDocument(doc);
 
+      // Get venture name (custom name if set, otherwise AI-generated)
+      const ventureName = window.app?.getVentureName() || data.company.company_overview?.name || 'Company';
+
+      // Store venture name in data for use by page methods
+      data.ventureName = ventureName;
+
       // Set document properties
       doc.setProperties({
         title: 'Venture Assessment Report',
-        subject: `Assessment of ${data.company.company_overview?.name || 'Company'}`,
+        subject: `Assessment of ${ventureName}`,
         author: 'Venture Assessment Platform',
         keywords: 'venture, assessment, team, competitive, market, ip risk, intellectual property',
         creator: 'Venture Assessment Platform'
@@ -227,13 +233,23 @@ const ExportUtility = {
         PdfLayout.addPage(doc);
         this.addTeamAssessment(doc, data);
       }
+      if (data.funding) {
+        PdfLayout.addPage(doc);
+        this.addFundingAssessment(doc, data);
+      }
       PdfLayout.addPage(doc);
       this.addCompetitiveAssessment(doc, data);
       PdfLayout.addPage(doc);
       this.addMarketAssessment(doc, data);
       PdfLayout.addPage(doc);
       this.addIpRiskAssessment(doc, data);
-      
+
+      // Add final recommendation if present
+      if (data.finalRecommendation) {
+        PdfLayout.addPage(doc);
+        this.addFinalRecommendation(doc, data);
+      }
+
       // Add appendix with full data
       PdfLayout.addPage(doc);
       this.addAppendixCover(doc);
@@ -252,8 +268,7 @@ const ExportUtility = {
 
       // Generate filename
       const timestamp = new Date().toISOString().split('T')[0];
-      const companyName = data.company.company_overview?.name || 'company';
-      const filename = `assessment_${companyName.toLowerCase().replace(/\s+/g, '_')}_${timestamp}.pdf`;
+      const filename = `assessment_${ventureName.toLowerCase().replace(/\s+/g, '_')}_${timestamp}.pdf`;
 
       const pdfBlob = doc.output('blob');
 
@@ -340,9 +355,9 @@ const ExportUtility = {
   PdfTypography.documentTitle(doc);
   doc.text('Venture Assessment Report', pageWidth / 2, 60, { align: 'center' });
 
-  // Company name
+  // Company name (use custom name if set)
   PdfTypography.pageTitle(doc);
-  const companyName = data.company.company_overview?.name || 'Unknown Company';
+  const companyName = data.ventureName || data.company.company_overview?.name || 'Unknown Company';
   doc.text(companyName, pageWidth / 2, 80, { align: 'center' });
 
   // SCA Name
@@ -889,6 +904,123 @@ const ExportUtility = {
   },
 
   /**
+   * Add funding assessment page
+   */
+  addFundingAssessment(doc, data) {
+    const pageWidth = doc.internal.pageSize.width;
+    const contentWidth = pageWidth - PdfLayout.marginLeft - PdfLayout.marginRight;
+    let y = 30;
+
+    const bulletOptions = {
+      bullet: '-',
+      lineHeight: PdfLayout.lineHeight(doc),
+      maxWidth: contentWidth,
+      afterItem: 1
+    };
+
+    PdfTypography.sectionTitle(doc);
+    doc.text('Funding Readiness Assessment', PdfLayout.marginLeft, y);
+    y += 15;
+
+    if (!data.funding) {
+      PdfTypography.body(doc);
+      doc.text('Funding assessment data not available.', PdfLayout.marginLeft, y);
+      return;
+    }
+
+    const funding = data.funding;
+    const formatted = funding.formatted || {};
+
+    PdfTypography.body(doc);
+    const aiScore = funding.funding_score ?? funding.score ?? '-';
+    doc.text(`AI Score: ${aiScore}/9`, PdfLayout.marginLeft, y);
+    doc.text(`User Score: ${funding.userScore ?? '-'}/9`, PdfLayout.marginLeft + 75, y);
+    y += 10;
+
+    // User justification
+    if (funding.userJustification) {
+      y = PdfLayout.ensureSpace(doc, y, 30);
+      doc.setFont(undefined, 'bold');
+      doc.text('User Justification:', PdfLayout.marginLeft, y);
+      y += 7;
+
+      doc.setFont(undefined, 'normal');
+      y = PdfLayout.drawText(
+        doc,
+        funding.userJustification,
+        PdfLayout.marginLeft,
+        y,
+        { maxWidth: contentWidth }
+      );
+      y += 6;
+    }
+
+    // AI Assessment / Score justification
+    const scoreJustification = funding.score_justification || formatted.scoreJustification;
+    if (scoreJustification) {
+      doc.setFont(undefined, 'bold');
+      doc.text('AI Assessment:', PdfLayout.marginLeft, y);
+      y += 7;
+
+      doc.setFont(undefined, 'normal');
+      y = PdfLayout.drawText(
+        doc,
+        scoreJustification,
+        PdfLayout.marginLeft,
+        y,
+        { maxWidth: contentWidth }
+      );
+      y += 8;
+    }
+
+    // Funding summary
+    y = PdfLayout.ensureSpace(doc, y, 30);
+    doc.setFont(undefined, 'bold');
+    doc.text('Funding Summary:', PdfLayout.marginLeft, y);
+    y += 7;
+
+    doc.setFont(undefined, 'normal');
+    const hasPriorFunding = formatted.hasPriorFunding ?? funding.has_prior_funding;
+    const totalRounds = formatted.totalFundingRounds ?? funding.total_funding_rounds ?? 0;
+    const totalPeerDeals = formatted.totalPeerDeals ?? (formatted.peerDeals?.length ?? 0);
+    const confidence = formatted.confidence !== undefined
+      ? Formatters.confidence(formatted.confidence)
+      : 'Not available';
+
+    y = PdfLayout.drawBulletList(
+      doc,
+      [
+        `Prior Funding Secured: ${hasPriorFunding ? 'Yes' : 'No'}`,
+        `Funding Rounds Identified: ${totalRounds}`,
+        `Comparable Market Deals: ${totalPeerDeals}`,
+        `Data Confidence: ${confidence}`
+      ],
+      PdfLayout.marginLeft,
+      y,
+      bulletOptions
+    );
+    y += 6;
+
+    // Key considerations/risks if available
+    const considerations = formatted.keyConsiderations || funding.key_considerations || [];
+    if (considerations.length > 0) {
+      y = PdfLayout.ensureSpace(doc, y, 30);
+      doc.setFont(undefined, 'bold');
+      doc.text('Key Considerations:', PdfLayout.marginLeft, y);
+      y += 7;
+
+      doc.setFont(undefined, 'normal');
+      y = PdfLayout.drawBulletList(
+        doc,
+        considerations.slice(0, 5),
+        PdfLayout.marginLeft,
+        y,
+        bulletOptions
+      );
+    }
+  },
+
+  /**
    * Add competitive assessment page
    */
   addCompetitiveAssessment(doc, data) {
@@ -1155,6 +1287,37 @@ const ExportUtility = {
     renderList('Key IP Challenges', formatted.challenges || []);
     renderList('Unique Protectable Features', formatted.uniqueFeatures || []);
     renderList('Crowded Feature Areas', formatted.crowdedFeatures || []);
+  },
+
+  /**
+   * Add final recommendation page
+   */
+  addFinalRecommendation(doc, data) {
+    const pageWidth = doc.internal.pageSize.width;
+    const contentWidth = pageWidth - PdfLayout.marginLeft - PdfLayout.marginRight;
+    let y = 30;
+
+    PdfTypography.sectionTitle(doc);
+    doc.text('Final Recommendation', PdfLayout.marginLeft, y);
+    y += 15;
+
+    // Get advisor name
+    const advisorName = document.getElementById('sca-name')?.value ||
+      window.app?.stateManager?.getState()?.scaName ||
+      'Advisor';
+
+    PdfTypography.body(doc, 'bold');
+    doc.text(`Submitted by: ${advisorName}`, PdfLayout.marginLeft, y);
+    y += 10;
+
+    PdfTypography.body(doc);
+    y = PdfLayout.drawText(
+      doc,
+      data.finalRecommendation,
+      PdfLayout.marginLeft,
+      y,
+      { maxWidth: contentWidth }
+    );
   },
 
   /**

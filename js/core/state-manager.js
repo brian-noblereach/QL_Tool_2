@@ -92,7 +92,8 @@ class StateManager {
       scaName: null,
       smartsheetRowId: null,
       assessmentKey: null,
-      finalRecommendation: ''
+      finalRecommendation: '',
+      customVentureName: null
     };
   }
 
@@ -145,6 +146,27 @@ class StateManager {
   getFinalRecommendation() {
     const state = this.getState();
     return state?.finalRecommendation || '';
+  }
+
+  /**
+   * Save custom venture name (user override of AI-generated name)
+   * @param {string} name - The custom venture name
+   */
+  saveCustomVentureName(name) {
+    const state = this.getState();
+    if (!state) return;
+    state.customVentureName = name || null;
+    state.timestamp = Date.now();
+    this.saveState(state);
+  }
+
+  /**
+   * Get custom venture name if set
+   * @returns {string|null} The custom name or null
+   */
+  getCustomVentureName() {
+    const state = this.getState();
+    return state?.customVentureName || null;
   }
 
   markComplete() {

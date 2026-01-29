@@ -104,8 +104,123 @@ class App {
     
     // File upload handling
     this.setupFileUploadListeners();
+
+    // Venture name editor
+    this.setupVentureNameEditor();
   }
-  
+
+  /**
+   * Set up the editable venture name functionality
+   */
+  setupVentureNameEditor() {
+    const nameText = document.getElementById('venture-name-text');
+    const editBtn = document.getElementById('edit-venture-name-btn');
+    const editSection = document.getElementById('venture-name-edit');
+    const nameInput = document.getElementById('venture-name-input');
+    const saveBtn = document.getElementById('save-venture-name-btn');
+    const cancelBtn = document.getElementById('cancel-venture-name-btn');
+    const hint = document.querySelector('.venture-name-hint');
+
+    if (!nameText || !editBtn || !editSection) return;
+
+    // Edit button click
+    editBtn.addEventListener('click', () => {
+      nameInput.value = nameText.textContent;
+      editSection.classList.remove('hidden');
+      hint.style.display = 'none';
+      nameInput.focus();
+      nameInput.select();
+    });
+
+    // Save button click
+    saveBtn.addEventListener('click', () => {
+      const newName = nameInput.value.trim();
+      if (newName) {
+        this.updateVentureName(newName);
+        editSection.classList.add('hidden');
+        hint.style.display = 'block';
+      }
+    });
+
+    // Cancel button click
+    cancelBtn.addEventListener('click', () => {
+      editSection.classList.add('hidden');
+      hint.style.display = 'block';
+    });
+
+    // Enter key to save
+    nameInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        saveBtn.click();
+      } else if (e.key === 'Escape') {
+        cancelBtn.click();
+      }
+    });
+  }
+
+  /**
+   * Update the venture name (user override)
+   * @param {string} name - New venture name
+   */
+  updateVentureName(name) {
+    // Update display
+    const nameText = document.getElementById('venture-name-text');
+    if (nameText) {
+      nameText.textContent = name;
+    }
+
+    // Save to state
+    this.stateManager.saveCustomVentureName(name);
+
+    // Show confirmation
+    this.toastManager.success('Venture name updated');
+  }
+
+  /**
+   * Get the current venture name (custom or AI-generated)
+   * @returns {string} The venture name
+   */
+  getVentureName() {
+    // Check for custom name first
+    const customName = this.stateManager.getCustomVentureName();
+    if (customName) return customName;
+
+    // Fall back to AI-generated name
+    const company = this.assessmentView?.data?.company;
+    if (company?.company_overview?.name) {
+      return company.company_overview.name;
+    }
+
+    // Last resort: derive from URL or file
+    const input = this.stateManager.getCompanyInput();
+    if (input?.fileName) {
+      return input.fileName.replace(/\.[^/.]+$/, '');
+    }
+    if (input?.url) {
+      try {
+        const parsed = new URL(input.url.startsWith('http') ? input.url : `https://${input.url}`);
+        return parsed.hostname.replace('www.', '');
+      } catch {
+        return input.url;
+      }
+    }
+
+    return 'Unknown Venture';
+  }
+
+  /**
+   * Set the venture name display (called when AI data loads)
+   * @param {string} aiName - AI-generated name
+   */
+  setVentureNameDisplay(aiName) {
+    const nameText = document.getElementById('venture-name-text');
+    if (!nameText) return;
+
+    // Use custom name if set, otherwise use AI name
+    const customName = this.stateManager.getCustomVentureName();
+    nameText.textContent = customName || aiName || 'Unknown Venture';
+  }
+
   setupFileUploadListeners() {
     const fileInput = document.getElementById('company-file');
     const uploadZone = document.getElementById('file-upload-zone');
@@ -389,12 +504,20 @@ class App {
     
     // Save input to state
     this.stateManager.setCompanyInput(validatedUrl || 'Document Upload', scaName, hasFile ? file.name : null);
-    
-    // Clear Smartsheet row ID for new analysis (unless we're re-running a loaded assessment)
-    // The row ID will be set if we're updating an existing assessment
-    if (!this.stateManager.getSmartsheetRowId()) {
-      window.SmartsheetIntegration?.clearCurrentRowId();
-    }
+
+    // Clear Smartsheet row ID for new analysis - each new analysis should create a new row
+    // This prevents trying to update a row from a previous analysis
+    this.stateManager.saveSmartsheetRowId(null);
+    window.SmartsheetIntegration?.clearCurrentRowId();
+
+    // Clear custom venture name for new analysis - AI will generate a new name
+    this.stateManager.saveCustomVentureName(null);
+    this.setVentureNameDisplay('Loading...');
+
+    // Clear final recommendation for new analysis
+    this.stateManager.saveFinalRecommendation('');
+    const recTextarea = document.getElementById('final-recommendation-text');
+    if (recTextarea) recTextarea.value = '';
     
     // Request notification permission
     await this.requestNotificationPermission();
@@ -445,6 +568,8 @@ class App {
       if (phase === 'company') {
         const companyData = data?.full || data;
         this.assessmentView.loadCompanyData(companyData);
+        // Set venture name display
+        this.setVentureNameDisplay(companyData?.company_overview?.name);
       } else {
         this.loadPhaseData(phase, data);
       }
@@ -476,6 +601,8 @@ class App {
         const companyData = data?.full || data;
         console.log('[App] Loading company data, keys:', Object.keys(companyData || {}));
         this.assessmentView.loadCompanyData(companyData);
+        // Set venture name display
+        this.setVentureNameDisplay(companyData?.company_overview?.name);
         break;
       case 'team':
         this.assessmentView.loadTeamData(data);
@@ -906,7 +1033,7 @@ class App {
 
     this.modalManager.show(modalHtml, (action) => {
       if (action === 'go-to-summary') {
-        this.tabManager.switchTo('summary');
+        this.tabManager.activateTab('summary');
       }
     });
   }

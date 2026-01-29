@@ -875,9 +875,16 @@ class AssessmentView {
     const researchTopic = analysisRaw?.research_topic || formatted.researchTopic || '';
     
     // Calculate total VC activity in the space
+    // Note: API may return amounts in raw dollars OR in millions - need to normalize
     const totalVCInvested = marketDeals.reduce((sum, deal) => {
       const amount = deal.amount || deal.funding_amount?.amount;
-      return sum + (typeof amount === 'number' ? amount : 0);
+      if (typeof amount === 'number') {
+        // If amount > 10000, assume it's in raw dollars and convert to millions
+        // Otherwise assume it's already in millions (e.g., 60 = $60M)
+        const inMillions = amount > 10000 ? amount / 1000000 : amount;
+        return sum + inMillions;
+      }
+      return sum;
     }, 0);
     
     // Get unique investors across all market deals
@@ -1002,9 +1009,10 @@ class AssessmentView {
                   
                   if (amount !== null) {
                     if (typeof amount === 'number') {
-                      // API returns amounts in millions - pass directly to formatter
-                      // The formatter expects values in millions (e.g., 10 = $10M)
-                      dealAmount = this.formatCurrencyWithCommas(amount, true);
+                      // API may return amounts in raw dollars or millions
+                      // If > 10000, assume raw dollars and convert to millions
+                      const inMillions = amount > 10000 ? amount / 1000000 : amount;
+                      dealAmount = this.formatCurrencyWithCommas(inMillions, true);
                     } else {
                       // It's a string, try to parse it
                       const amountStr = String(amount).toLowerCase();
@@ -1137,8 +1145,10 @@ class AssessmentView {
                   
                   if (amount !== null) {
                     if (typeof amount === 'number') {
-                      // API returns amounts in millions - pass directly to formatter
-                      dealAmount = this.formatCurrencyWithCommas(amount, true);
+                      // API may return amounts in raw dollars or millions
+                      // If > 10000, assume raw dollars and convert to millions
+                      const inMillions = amount > 10000 ? amount / 1000000 : amount;
+                      dealAmount = this.formatCurrencyWithCommas(inMillions, true);
                     } else {
                       const amountStr = String(amount).toLowerCase();
                       const numMatch = amountStr.match(/[\d,.]+/);
@@ -1150,7 +1160,7 @@ class AssessmentView {
                             dealAmount = this.formatCurrencyWithCommas(num * 1000, true); // Convert billions to millions
                           } else if (amountStr.includes('million') || amountStr.includes('m')) {
                             dealAmount = this.formatCurrencyWithCommas(num, true);
-                          } else if (num > 1000) {
+                          } else if (num > 10000) {
                             // Large number without unit - assume raw dollars, convert to millions
                             dealAmount = this.formatCurrencyWithCommas(num / 1000000, true);
                           } else {
@@ -1842,14 +1852,18 @@ class AssessmentView {
         isSubmitted: userScore.submitted
       };
     };
-    
+
+    // Get final recommendation from state manager
+    const finalRecommendation = window.app?.stateManager?.getFinalRecommendation() || '';
+
     return {
       company: this.data.company,
       team: getDimensionExport('team'),
       funding: getDimensionExport('funding'),
       competitive: getDimensionExport('competitive'),
       market: getDimensionExport('market'),
-      iprisk: getDimensionExport('iprisk')
+      iprisk: getDimensionExport('iprisk'),
+      finalRecommendation: finalRecommendation || null
     };
   }
 
